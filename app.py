@@ -1,4 +1,4 @@
-# app.py (VERSÃO FINAL MAXIMIZADA E REFINADA)
+# app.py (VERSÃO FINAL MAXIMIZADA E REFINADA, COM CORREÇÃO DE GRID/PACK)
 import tkinter as tk
 from tkinter import messagebox
 import ttkbootstrap as ttk 
@@ -17,24 +17,23 @@ class FlowSchedulerApp(ttk.Window):
     def __init__(self):
         super().__init__(themename="cosmo") 
         self.title("Flow Scheduler - Gestão de Carga de Trabalho")
-
+        
         # MAXIMIZAÇÃO (Tela expandida)
         self.state('zoomed') 
-
+        
         container = ttk.Frame(self)
-        container.pack(fill="both", expand=True)
+        container.pack(fill="both", expand=True) # O container principal AINDA usa pack
         self.frames = {}
         for F in (DashboardView, EmpregadosView, TarefasView):
             page_name = F.__name__
             frame = F(parent=container, controller=self)
-            self.frames[page_name] = frame
             frame.grid(row=0, column=0, sticky="nsew")
-
+            self.frames[page_name] = frame
+        
         self.show_frame("DashboardView")
 
     def show_frame(self, page_name):
         frame = self.frames[page_name]
-        # Atualiza o preview do Dashboard sempre que ele é exibido
         if page_name == "DashboardView":
              frame.atualizar_preview() 
         frame.tkraise()
@@ -47,56 +46,65 @@ class BaseView(ttk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
         self.controller = controller
+        
+        # CORREÇÃO CRÍTICA: O botão agora usa GRID (Tiramos o pack)
         home_button = ttk.Button(self, text="<< Dashboard Principal", command=controller.go_to_home, bootstyle="secondary")
-        home_button.pack(pady=10, padx=10, anchor="nw")
-
-# --- DashboardView (Refatorado com Painel Lateral) ---
+        home_button.grid(row=0, column=0, pady=10, padx=10, sticky="nw")
+        
+        # Configuração do Grid para suportar o botão Home e o conteúdo abaixo
+        self.grid_rowconfigure(0, weight=0) # Linha do botão Home (não expande)
+        self.grid_rowconfigure(1, weight=1) # Linha do conteúdo principal (expande)
+        self.grid_columnconfigure(0, weight=1) # Coluna de conteúdo expande
 
 class DashboardView(BaseView):
     """Tela principal com opções de navegação e visualização de status."""
     def __init__(self, parent, controller):
         super().__init__(parent, controller)
 
-        # Configuração do Grid para 2 Colunas (Layout Expansivo)
-        self.grid_rowconfigure(0, weight=1)
-        self.grid_columnconfigure(0, weight=1) 
-        self.grid_columnconfigure(1, weight=1) 
+        # Usamos um Frame interno para o conteúdo principal (abaixo do botão Home)
+        main_content_frame = ttk.Frame(self)
+        main_content_frame.grid(row=1, column=0, sticky="nsew", padx=20, pady=20) 
+
+        # Configuração do Grid interno para a Divisão (Navegação Col 0, Preview Col 1)
+        main_content_frame.grid_rowconfigure(0, weight=1)
+        main_content_frame.grid_columnconfigure(0, weight=1)
+        main_content_frame.grid_columnconfigure(1, weight=1)
 
         # --- Painel de Navegação (Coluna 0) ---
-        nav_frame = ttk.Frame(self)
+        nav_frame = ttk.Frame(main_content_frame)
         nav_frame.grid(row=0, column=0, padx=50, pady=50, sticky="nsew")
-
-        # Centralizando os elementos
+        
+        # Centralizando os elementos dentro do nav_frame 
         nav_frame.grid_rowconfigure(0, weight=1) 
         nav_frame.grid_rowconfigure(4, weight=1) 
         nav_frame.grid_columnconfigure(0, weight=1)
 
         ttk.Label(nav_frame, text="DASHBOARD PRINCIPAL", font=("Arial", 24)).grid(row=1, column=0, pady=20)
-
+        
         ttk.Button(nav_frame, text="Gerenciar Empregados", bootstyle="primary",
                    command=lambda: controller.show_frame("EmpregadosView")).grid(row=2, column=0, pady=10, sticky="ew")
-
+        
         ttk.Button(nav_frame, text="Gerenciar Tarefas e Atribuições", bootstyle="primary",
                    command=lambda: controller.show_frame("TarefasView")).grid(row=3, column=0, pady=10, sticky="ew")
 
         # --- Painel de Preview de Tarefas (Coluna 1) ---
-        self.preview_frame = ttk.Frame(self, bootstyle="info", width=350)
+        self.preview_frame = ttk.Frame(main_content_frame, bootstyle="info", width=350)
         self.preview_frame.grid(row=0, column=1, padx=50, pady=50, sticky="nsew")
         self.preview_frame.grid_columnconfigure(0, weight=1)
-
+        
         ttk.Label(self.preview_frame, text="🚨 PRÓXIMAS TAREFAS PENDENTES 🚨", font=("Arial", 14), bootstyle="inverse-info").grid(row=0, column=0, sticky="ew", pady=(10, 5), padx=5)
-
+        
         self.lista_urgente = ttk.Frame(self.preview_frame)
         self.lista_urgente.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
 
     def atualizar_preview(self):
         """Busca as tarefas urgentes e as exibe no painel lateral."""
-
+        
         for widget in self.lista_urgente.winfo_children():
             widget.destroy()
-
+            
         tarefas = listar_proximas_tarefas()
-
+        
         if not tarefas:
             ttk.Label(self.lista_urgente, text="🎉 Nenhuma tarefa urgente encontrada!").pack(pady=20)
             return
@@ -109,21 +117,25 @@ class DashboardView(BaseView):
         # Exibe as tarefas
         for i, t in enumerate(tarefas, start=1):
             cor = "danger" if i == 1 else "warning" if i == 2 else "light"
-
+            
             ttk.Label(self.lista_urgente, text=t.prazo, font=("Arial", 9), bootstyle=cor).grid(row=i, column=0, padx=5, pady=2, sticky="w")
             ttk.Label(self.lista_urgente, text=t.titulo, font=("Arial", 9)).grid(row=i, column=1, padx=5, pady=2, sticky="w")
             ttk.Label(self.lista_urgente, text=t.empregado_nome or "N/A", font=("Arial", 9)).grid(row=i, column=2, padx=5, pady=2, sticky="w")
-
 
 # --- EmpregadosView ---
 class EmpregadosView(BaseView):
     """Tela para CRUD de Empregados."""
     def __init__(self, parent, controller):
         super().__init__(parent, controller)
-        ttk.Label(self, text="GERENCIAMENTO DE EMPREGADOS", font=("Arial", 18)).pack(pady=10)
+        
+        # Usamos um Frame interno (content_frame) para usar .pack() sem conflito com o Grid da BaseView
+        content_frame = ttk.Frame(self)
+        content_frame.grid(row=1, column=0, sticky="nsew") 
+        
+        ttk.Label(content_frame, text="GERENCIAMENTO DE EMPREGADOS", font=("Arial", 18)).pack(pady=10)
 
         colunas = ('id', 'nome', 'cargo', 'email')
-        self.tree = ttk.Treeview(self, columns=colunas, show='headings', bootstyle="info") 
+        self.tree = ttk.Treeview(content_frame, columns=colunas, show='headings', bootstyle="info") 
         self.tree.heading('id', text='ID', anchor=tk.W)
         self.tree.heading('nome', text='Nome')
         self.tree.heading('cargo', text='Cargo')
@@ -134,7 +146,7 @@ class EmpregadosView(BaseView):
         self.tree.column('email', width=200)
         self.tree.pack(pady=10, padx=10, fill="both", expand=True)
 
-        button_frame = ttk.Frame(self)
+        button_frame = ttk.Frame(content_frame)
         button_frame.pack(pady=10)
         ttk.Button(button_frame, text="Adicionar Novo", bootstyle="success",
                    command=self.abrir_formulario_adicionar).pack(side=tk.LEFT, padx=5)
@@ -142,34 +154,35 @@ class EmpregadosView(BaseView):
                    command=self.abrir_formulario_edicao).pack(side=tk.LEFT, padx=5)
         ttk.Button(button_frame, text="Excluir Selecionado", bootstyle="danger",
                    command=self.deletar_empregado).pack(side=tk.LEFT, padx=5)
-
+        
         self.atualizar_lista()
 
+    # ... (Restante dos métodos da EmpregadosView) ...
     def atualizar_lista(self):
         for item in self.tree.get_children():
             self.tree.delete(item)
-
+            
         empregados = listar_empregados()
-
+        
         if not empregados:
             self.tree.insert('', tk.END, values=('Nenhum empregado cadastrado.', '', '', ''), tags=('empty',))
         else:
             for e in empregados:
                 self.tree.insert('', tk.END, values=(e.id, e.nome, e.cargo, e.email))
-
+    
     def abrir_formulario_adicionar(self):
         janela_form = tk.Toplevel(self)
         janela_form.title("Adicionar Empregado")
         janela_form.transient(self.controller)
-
+        
         ttk.Label(janela_form, text="Nome:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
         nome_entry = ttk.Entry(janela_form)
         nome_entry.grid(row=0, column=1, padx=5, pady=5)
-
+        
         ttk.Label(janela_form, text="Cargo:").grid(row=1, column=0, padx=5, pady=5, sticky="w")
         cargo_entry = ttk.Entry(janela_form)
         cargo_entry.grid(row=1, column=1, padx=5, pady=5)
-
+        
         ttk.Label(janela_form, text="Email:").grid(row=2, column=0, padx=5, pady=5, sticky="w")
         email_entry = ttk.Entry(janela_form)
         email_entry.grid(row=2, column=1, padx=5, pady=5)
@@ -178,7 +191,7 @@ class EmpregadosView(BaseView):
             nome = nome_entry.get()
             cargo = cargo_entry.get()
             email = email_entry.get()
-
+            
             if nome and cargo:
                 if adicionar_empregado(nome, cargo, email):
                     messagebox.showinfo("Sucesso", "Empregado adicionado com sucesso!", parent=janela_form)
@@ -190,7 +203,7 @@ class EmpregadosView(BaseView):
                 messagebox.showwarning("Atenção", "Preencha Nome e Cargo.", parent=janela_form)
 
         ttk.Button(janela_form, text="Salvar", command=submit, bootstyle="success").grid(row=3, column=0, columnspan=2, pady=15)
-
+    
     def abrir_formulario_edicao(self):
         selecao = self.tree.selection()
         if not selecao:
@@ -208,12 +221,12 @@ class EmpregadosView(BaseView):
         janela_form = tk.Toplevel(self)
         janela_form.title(f"Editar Empregado: {empregado.nome}")
         janela_form.transient(self.controller)
-
+        
         ttk.Label(janela_form, text="Nome:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
         nome_entry = ttk.Entry(janela_form)
         nome_entry.insert(0, empregado.nome)
         nome_entry.grid(row=0, column=1, padx=5, pady=5)
-
+        
         ttk.Label(janela_form, text="Cargo:").grid(row=1, column=0, padx=5, pady=5, sticky="w")
         cargo_entry = ttk.Entry(janela_form)
         cargo_entry.insert(0, empregado.cargo)
@@ -228,7 +241,7 @@ class EmpregadosView(BaseView):
             novo_nome = nome_entry.get()
             novo_cargo = cargo_entry.get()
             novo_email = email_entry.get()
-
+            
             if novo_nome and novo_cargo:
                 if atualizar_empregado(empregado_id, novo_nome, novo_cargo, novo_email):
                     messagebox.showinfo("Sucesso", "Empregado atualizado com sucesso!", parent=janela_form)
@@ -240,7 +253,7 @@ class EmpregadosView(BaseView):
                 messagebox.showwarning("Atenção", "Preencha Nome e Cargo.", parent=janela_form)
 
         ttk.Button(janela_form, text="Salvar Alterações", command=submit_edicao, bootstyle="warning").grid(row=3, column=0, columnspan=2, pady=15)
-
+        
     def deletar_empregado(self):
         selecao = self.tree.selection()
         if not selecao:
@@ -256,7 +269,7 @@ class EmpregadosView(BaseView):
             f"Tem certeza que deseja DELETAR o empregado: {nome_empregado} (ID: {empregado_id})?\nEsta ação é irreversível.",
             icon='warning'
         )
-
+        
         if confirmar:
             if deletar_empregado(empregado_id):
                 messagebox.showinfo("Sucesso", f"Empregado {nome_empregado} deletado com sucesso!")
@@ -269,10 +282,15 @@ class TarefasView(BaseView):
     """Tela para CRUD de Tarefas."""
     def __init__(self, parent, controller):
         super().__init__(parent, controller)
-        ttk.Label(self, text="GERENCIAMENTO DE TAREFAS", font=("Arial", 18)).pack(pady=10)
+        
+        # Usamos um Frame interno (content_frame) para usar .pack() sem conflito com o Grid da BaseView
+        content_frame = ttk.Frame(self)
+        content_frame.grid(row=1, column=0, sticky="nsew") # Colocamos o conteúdo abaixo do botão Home
+        
+        ttk.Label(content_frame, text="GERENCIAMENTO DE TAREFAS", font=("Arial", 18)).pack(pady=10)
 
         colunas = ('id', 'titulo', 'prazo', 'empregado', 'concluida')
-        self.tree = ttk.Treeview(self, columns=colunas, show='headings', bootstyle="info")
+        self.tree = ttk.Treeview(content_frame, columns=colunas, show='headings', bootstyle="info")
         self.tree.heading('id', text='ID', anchor=tk.W)
         self.tree.heading('titulo', text='Título')
         self.tree.heading('prazo', text='Prazo')
@@ -288,7 +306,7 @@ class TarefasView(BaseView):
         self.tree.tag_configure('concluida', background='#e0ffe0')
         self.tree.tag_configure('pendente', background='#ffdbdb')
 
-        button_frame = ttk.Frame(self)
+        button_frame = ttk.Frame(content_frame)
         button_frame.pack(pady=10)
         ttk.Button(button_frame, text="Nova Tarefa", bootstyle="success",
                    command=self.abrir_formulario_adicionar).pack(side=tk.LEFT, padx=5)
@@ -298,22 +316,22 @@ class TarefasView(BaseView):
                    command=self.deletar_tarefa).pack(side=tk.LEFT, padx=5)
         ttk.Button(button_frame, text="Marcar/Desmarcar Concluída", bootstyle="info",
                    command=self.toggle_concluida).pack(side=tk.LEFT, padx=5)
-
+        
         self.atualizar_lista()
 
     def atualizar_lista(self):
         for item in self.tree.get_children():
             self.tree.delete(item)
-
+            
         tarefas = listar_tarefas()
-
+        
         if not tarefas:
             self.tree.insert('', tk.END, values=('Nenhuma tarefa cadastrada.', '', '', '', ''), tags=('empty',))
         else:
             for t in tarefas:
                 empregado_nome = t.empregado_nome if t.empregado_nome else "Não Atribuído"
                 status = "✅ SIM" if t.concluida else "❌ NÃO"
-
+                
                 self.tree.insert('', tk.END, 
                                  values=(t.id, t.titulo, t.prazo, empregado_nome, status),
                                  tags=('concluida' if t.concluida else 'pendente',)
@@ -329,13 +347,13 @@ class TarefasView(BaseView):
         janela_form = tk.Toplevel(janela_pai)
         janela_form.title("Editar Tarefa" if tarefa_item else "Adicionar Tarefa")
         janela_form.transient(self.controller)
-
+        
         opcoes_empregados = self._carregar_empregados_para_combo()
 
         ttk.Label(janela_form, text="Título:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
         titulo_entry = ttk.Entry(janela_form, width=40)
         titulo_entry.grid(row=0, column=1, padx=5, pady=5)
-
+        
         ttk.Label(janela_form, text="Descrição:").grid(row=1, column=0, padx=5, pady=5, sticky="w")
         descricao_entry = tk.Text(janela_form, height=4, width=30)
         descricao_entry.grid(row=1, column=1, padx=5, pady=5)
@@ -363,23 +381,23 @@ class TarefasView(BaseView):
             descricao_entry.insert('1.0', tarefa_completa.descricao)
             prazo_entry.insert(0, tarefa_completa.prazo)
             concluida_var.set(tarefa_completa.concluida)
-
+            
             if tarefa_completa.empregado_id:
                 nome_completo = next((nome for nome, id_val in self.empregados_dict.items() if id_val == tarefa_completa.empregado_id), "Não Atribuído")
                 empregado_combo.set(nome_completo)
-
+            
         return janela_form, titulo_entry, descricao_entry, prazo_entry, empregado_var, concluida_var
-
+    
     def abrir_formulario_adicionar(self):
         janela_form, titulo_entry, descricao_entry, prazo_entry, empregado_var, _ = self._criar_formulario_tarefa(self)
-
+        
         def submit():
             titulo = titulo_entry.get()
             descricao = descricao_entry.get('1.0', tk.END).strip()
             prazo = prazo_entry.get()
             nome_selecionado = empregado_var.get()
             empregado_id = self.empregados_dict.get(nome_selecionado, None) 
-
+            
             if titulo and prazo:
                 if adicionar_tarefa(titulo, descricao, prazo, empregado_id):
                     messagebox.showinfo("Sucesso", "Tarefa adicionada com sucesso!", parent=janela_form)
@@ -390,7 +408,7 @@ class TarefasView(BaseView):
             else:
                 messagebox.showwarning("Atenção", "Preencha Título e Prazo.", parent=janela_form)
 
-        ttk.Button(janela_form, text="Salvar Tarefa", command=submit, bootstyle="success").grid(row=5, column=0, columnspan=2, pady=15)
+            ttk.Button(janela_form, text="Salvar Tarefa", command=submit, bootstyle="success").grid(row=5, column=0, columnspan=2, pady=15)
 
     def abrir_formulario_edicao(self):
         selecao = self.tree.selection()
@@ -400,9 +418,9 @@ class TarefasView(BaseView):
 
         item_selecionado = self.tree.item(selecao[0], 'values')
         tarefa_id = item_selecionado[0]
-
+        
         janela_form, titulo_entry, descricao_entry, prazo_entry, empregado_var, concluida_var = self._criar_formulario_tarefa(self, tarefa_item=item_selecionado)
-
+        
         def submit_edicao():
             titulo = titulo_entry.get()
             descricao = descricao_entry.get('1.0', tk.END).strip()
@@ -421,7 +439,7 @@ class TarefasView(BaseView):
             else:
                 messagebox.showwarning("Atenção", "Preencha Título e Prazo.", parent=janela_form)
 
-        ttk.Button(janela_form, text="Salvar Alterações", command=submit_edicao, bootstyle="warning").grid(row=5, column=0, columnspan=2, pady=15)
+            ttk.Button(janela_form, text="Salvar Alterações", command=submit_edicao, bootstyle="warning").grid(row=5, column=0, columnspan=2, pady=15)
 
     def deletar_tarefa(self):
         selecao = self.tree.selection()
@@ -438,14 +456,14 @@ class TarefasView(BaseView):
             f"Tem certeza que deseja DELETAR a tarefa: {titulo_tarefa} (ID: {tarefa_id})?",
             icon='warning'
         )
-
+        
         if confirmar:
             if deletar_tarefa(tarefa_id):
                 messagebox.showinfo("Sucesso", f"Tarefa {titulo_tarefa} deletada com sucesso!")
                 self.atualizar_lista()
             else:
                 messagebox.showerror("Erro", "Falha ao deletar tarefa no DB.")
-
+                
     def toggle_concluida(self):
         selecao = self.tree.selection()
         if not selecao:
