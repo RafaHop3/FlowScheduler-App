@@ -1,0 +1,36 @@
+name: Windows Executable Build
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch: 
+
+jobs:
+  build-windows:
+    runs-on: windows-latest # Roda em um ambiente Windows Server (nativo)
+
+    steps:
+    - name: 📦 Checkout Code
+      uses: actions/checkout@v4
+
+    - name: 🐍 Set up Python 3.8
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.8' # Python 3.8 é a versão mais segura para PyInstaller no Windows
+
+    - name: 🛠️ Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        # Instala o PyInstaller e as bibliotecas no Windows
+        pip install pyinstaller==4.10 sqlalchemy ttkbootstrap
+
+    - name: 🔨 Compile Executable
+      run: |
+        # Comando simples que funciona 100% no Python 3.8/PyInstaller 4.10 no Windows
+        pyinstaller --onefile --windowed --name "FlowScheduler" app.py
+
+    - name: 📤 Upload Executable Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: FlowScheduler-Windows-EXE
+        path: dist/FlowScheduler.exe

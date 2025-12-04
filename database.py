@@ -1,5 +1,3 @@
-# database.py
-
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy import create_engine
 from models import Base, Empregado, Tarefa

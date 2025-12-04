@@ -13,10 +13,11 @@ class Empregado(Base):
     nome = Column(String)
     cargo = Column(String)
     email = Column(String, unique=True)
-    # Relação: Permite acessar as tarefas de um empregado
+    # Relação: Permite acessar as tarefas de um empregado (empregado.tarefas)
     tarefas = relationship("Tarefa", backref="empregado") 
 
     def __repr__(self):
+        # Representação de depuração para Empregado
         return f"<Empregado(id={self.id}, nome='{self.nome}', cargo='{self.cargo}')>"
 
 class Tarefa(Base):
@@ -28,8 +29,9 @@ class Tarefa(Base):
     prazo = Column(String)
     concluida = Column(Boolean, default=False)
     
-    # CRÍTICO: nullable=True para permitir tarefas não atribuídas (resolve o bug de salvamento)
+    # CRÍTICO: nullable=True adicionado para permitir tarefas não atribuídas
     empregado_id = Column(Integer, ForeignKey('empregados.id'), nullable=True) 
 
     def __repr__(self):
+        # Representação de depuração para Tarefa
         return f"<Tarefa(id={self.id}, titulo='{self.titulo}', empregado_id={self.empregado_id})>"
