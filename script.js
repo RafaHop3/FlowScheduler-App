@@ -1,4 +1,4 @@
-// ✅ URL da sua API Backend no Render
+// ✅ URL da sua API Backend no Render (Base Global)
 const API_BASE_URL = 'https://flowscheduler-app-1.onrender.com';
 
 // Recupera o token salvo no navegador (se existir)
@@ -14,8 +14,10 @@ document.addEventListener('DOMContentLoaded', () => {
         showApp(); // Se tem token, pula o login e mostra o painel
     } else {
         // Garante que a tela de login esteja visível se não houver token
-        document.getElementById('login-screen').style.display = 'flex';
-        document.getElementById('app-screen').style.display = 'none';
+        const loginScreen = document.getElementById('login-screen');
+        const appScreen = document.getElementById('app-screen');
+        if (loginScreen) loginScreen.style.display = 'flex';
+        if (appScreen) appScreen.style.display = 'none';
     }
 
     // 2. Configura os botões da Tela de Login/Registro
@@ -52,7 +54,8 @@ async function handleLogin(e) {
     formData.append('password', senha);
 
     try {
-        const response = await fetch(`${API_BASE_URL}/token`, {
+        // URL explícita para evitar erro 405 (Method Not Allowed)
+        const response = await fetch('https://flowscheduler-app-1.onrender.com/token', {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: formData
@@ -84,7 +87,8 @@ async function handleRegister(e) {
     };
 
     try {
-        const res = await fetch(`${API_BASE_URL}/empregados/registrar`, {
+        // URL explícita para evitar erro 405
+        const res = await fetch('https://flowscheduler-app-1.onrender.com/empregados/registrar', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
@@ -98,6 +102,7 @@ async function handleRegister(e) {
             alert("Erro ao criar conta: " + (err.detail || "Dados inválidos"));
         }
     } catch (error) {
+        console.error(error);
         alert("Erro de conexão com a API.");
     }
 }
@@ -109,8 +114,11 @@ function logout() {
 
 function showApp() {
     // Esconde login, mostra sistema
-    document.getElementById('login-screen').style.display = 'none';
-    document.getElementById('app-screen').style.display = 'block';
+    const loginScreen = document.getElementById('login-screen');
+    const appScreen = document.getElementById('app-screen');
+    
+    if (loginScreen) loginScreen.style.display = 'none';
+    if (appScreen) appScreen.style.display = 'block';
     
     // Carrega os dados protegidos
     loadEmpregados();
@@ -132,6 +140,7 @@ async function fetchSecure(endpoint, options = {}) {
     options.headers['Authorization'] = `Bearer ${authToken}`;
 
     try {
+        // Usa a constante API_BASE_URL para as rotas internas após login
         const response = await fetch(`${API_BASE_URL}${endpoint}`, options);
 
         // Se der erro 401 (Token inválido/expirado), desloga o usuário
@@ -196,7 +205,7 @@ async function handleCreateEmpregado(e) {
         senha: document.getElementById('senha').value // Novo campo de senha
     };
 
-    // Usa a rota de registro (reaproveitada para criar usuários logado)
+    // Usa fetchSecure para criar usuário logado
     const res = await fetchSecure('/empregados/registrar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
