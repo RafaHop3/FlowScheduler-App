@@ -11,7 +11,6 @@ import os
 
 # Importa database e models
 from database import get_db
-# Certifique-se de que seu arquivo models.py já tenha os campos senha_hash e funcao
 from models import Base, Empregado, Tarefa
 
 # --- CONFIGURAÇÃO DE SEGURANÇA ---
@@ -42,14 +41,12 @@ app.add_middleware(
 
 # --- SCHEMAS (Pydantic) ---
 
-# Schema para criar conta (com senha)
 class EmpregadoCreate(BaseModel):
     nome: str
     cargo: str
     email: str
     senha: str 
 
-# Schema de resposta (SEM senha)
 class EmpregadoSchema(BaseModel):
     id: int
     nome: str
@@ -93,7 +90,6 @@ def create_access_token(data: dict):
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
-# --- DEPENDÊNCIA: PEGAR USUÁRIO LOGADO ---
 async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -115,6 +111,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
 
 @app.get("/", tags=["Root"])
 def read_root():
+    # Mensagem atualizada para confirmar que o código novo subiu
     return {"message": "Flow Scheduler API Segura está online!"}
 
 # --- ROTAS PÚBLICAS (Login e Registro) ---
@@ -135,7 +132,6 @@ def registrar_empregado(empregado: EmpregadoCreate, db: Session = Depends(get_db
 
     hashed_password = get_password_hash(empregado.senha)
     
-    # O primeiro usuário vira Admin
     count = db.query(Empregado).count()
     role = "admin" if count == 0 else "user"
 
@@ -155,7 +151,6 @@ def registrar_empregado(empregado: EmpregadoCreate, db: Session = Depends(get_db
 
 @app.get("/empregados/", response_model=List[EmpregadoSchema])
 def listar_todos_empregados(db: Session = Depends(get_db), current_user: Empregado = Depends(get_current_user)):
-    # Só ADMIN vê todos. User vê só a si mesmo.
     if current_user.funcao == "admin":
         return db.query(Empregado).all()
     else:
@@ -185,7 +180,6 @@ def listar_tarefas(db: Session = Depends(get_db), current_user: Empregado = Depe
 
 @app.post("/tarefas/", response_model=TarefaSchema)
 def criar_tarefa(tarefa: TarefaCreate, db: Session = Depends(get_db), current_user: Empregado = Depends(get_current_user)):
-    # Se for Admin e mandou ID, usa o ID. Se não, usa o ID do usuário logado.
     dono_id = current_user.id
     if current_user.funcao == "admin" and tarefa.empregado_id:
         dono_id = tarefa.empregado_id
