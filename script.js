@@ -1,7 +1,44 @@
-// CRÍTICO: Substitua esta URL pelo domínio que o Railway irá fornecer.
-// Exemplo: const API_BASE_URL = 'https://flow-scheduler-xxxx.up.railway.app';
-const API_BASE_URL = 'http://localhost:8000'; // URL provisória para teste local
+// ✅ CORREÇÃO CRÍTICA: Substituído o localhost pela URL pública do Render.
+const API_BASE_URL = 'https://flowscheduler-app.onrender.com';
 
+// Define loadEmpregados fora do DOMContentLoaded para que possa ser usada globalmente
+// e para evitar erros de escopo.
+async function loadEmpregados() {
+    try {
+        // Acessa o endpoint /empregados/
+        const response = await fetch(`${API_BASE_URL}/empregados/`);
+        
+        // CRÍTICO: Se houver um erro, é provável que seja CORS ou API offline/erro interno.
+        if (!response.ok) {
+            throw new Error(`Erro ao buscar dados da API: ${response.status} - Verifique a aba Rede no console.`);
+        }
+
+        const empregados = await response.json();
+        const tbody = document.querySelector('#empregados-table tbody');
+        tbody.innerHTML = ''; // Limpa a tabela
+
+        if (empregados.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4">Nenhum empregado cadastrado.</td></tr>';
+            return;
+        }
+
+        empregados.forEach(emp => {
+            const row = tbody.insertRow();
+            // Garante que as colunas correspondem ao cabeçalho (ID, Nome, Cargo, Email)
+            row.insertCell().textContent = emp.id;
+            row.insertCell().textContent = emp.nome;
+            row.insertCell().textContent = emp.cargo;
+            row.insertCell().textContent = emp.email;
+        });
+
+    } catch (error) {
+        console.error('Erro ao carregar empregados:', error);
+        document.querySelector('#empregados-table tbody').innerHTML = `<tr><td colspan="4">Erro de Conexão: ${error.message}</td></tr>`;
+    }
+}
+
+
+// --- LÓGICA PRINCIPAL (POST/GET) ---
 document.addEventListener('DOMContentLoaded', () => {
     const form = document.getElementById('empregado-form');
     const loadButton = document.getElementById('load-data');
@@ -16,7 +53,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const cargo = document.getElementById('cargo').value;
         const email = document.getElementById('email').value;
 
-        const data = { nome, cargo, email };
+        // O objeto JSON para o POST
+        const data = { nome: nome, cargo: cargo, email: email }; 
 
         try {
             const response = await fetch(`${API_BASE_URL}/empregados/`, {
@@ -30,7 +68,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (response.ok) {
                 alert("Empregado salvo com sucesso!");
                 form.reset();
-                loadEmpregados(); // Recarrega a lista após o sucesso
+                loadEmpregados(); // Chama a função global para atualizar a lista
             } else {
                 const error = await response.json();
                 alert(`Falha ao salvar: ${error.detail || response.statusText}`);
@@ -46,51 +84,39 @@ document.addEventListener('DOMContentLoaded', () => {
     // ------------------------------------
     loadButton.addEventListener('click', loadEmpregados);
 
-    async function loadEmpregados() {
-        try {
-            const response = await fetch(`${API_BASE_URL}/empregados/`);
-            
-            if (!response.ok) {
-                throw new Error('Erro ao buscar dados da API.');
-            }
-
-            const empregados = await response.json();
-            const tbody = document.querySelector('#empregados-table tbody');
-            tbody.innerHTML = ''; // Limpa a tabela
-
-            if (empregados.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4">Nenhum empregado cadastrado.</td></tr>';
-                return;
-            }
-
-            empregados.forEach(emp => {
-                const row = tbody.insertRow();
-                row.insertCell().textContent = emp.id;
-                row.insertCell().textContent = emp.nome;
-                row.insertCell().textContent = emp.cargo;
-                row.insertCell().textContent = emp.email;
-            });
-
-        } catch (error) {
-            console.error('Erro ao carregar empregados:', error);
-            document.querySelector('#empregados-table tbody').innerHTML = `<tr><td colspan="4">Erro: ${error.message}</td></tr>`;
-        }
-    }
-
-    // Carrega a lista ao iniciar a página (se a API estiver online)
+    // Carrega a lista ao iniciar a página
     loadEmpregados();
+    
+    // Inicia a checagem de tarefas após o DOM estar pronto
+    checkUrgentTasks();
+    setInterval(checkUrgentTasks, 30000);
 });
-// script.js (Adicione no final)
 
+
+// --- LÓGICA DE ALERTA DE TAREFAS (SEÇÃO ADICIONAL) ---
+
+// CRIA O CONTAINER DE ALERTA DINAMICAMENTE
 const alertContainer = document.createElement('div');
 alertContainer.id = 'task-alerts';
-document.body.insertBefore(alertContainer, document.querySelector('main'));
+
+// Tenta inserir antes do main, mas apenas se o main existir
+document.addEventListener('DOMContentLoaded', () => {
+    const mainElement = document.querySelector('main');
+    if (mainElement) {
+        document.body.insertBefore(alertContainer, mainElement);
+    } else {
+        document.body.appendChild(alertContainer); // Fallback
+    }
+});
+
 
 async function checkUrgentTasks() {
     try {
+        // Acessa o endpoint /tarefas/
         const response = await fetch(`${API_BASE_URL}/tarefas/`);
+        
         if (!response.ok) {
-            console.error("Não foi possível carregar tarefas para alerta.");
+            console.warn("Não foi possível carregar tarefas para alerta (endpoint /tarefas/ retornou erro).");
             return;
         }
         
@@ -106,12 +132,15 @@ async function checkUrgentTasks() {
             
             // CRIAÇÃO DO ALERTA (UX)
             const alertBox = document.createElement('div');
-            alertBox.style.backgroundColor = '#f44336'; // Vermelho
-            alertBox.style.color = 'white';
-            alertBox.style.padding = '10px';
-            alertBox.style.margin = '10px auto';
-            alertBox.style.textAlign = 'center';
-            alertBox.style.maxWidth = '1000px';
+            alertBox.style.cssText = `
+                background-color: #f44336; /* Vermelho */
+                color: white;
+                padding: 10px;
+                margin: 10px auto;
+                text-align: center;
+                max-width: 1000px;
+                border-radius: 4px;
+            `;
             
             alertBox.textContent = `🚨 ATENÇÃO: Você tem ${urgencyCount} tarefas pendentes! Verifique a gestão de tarefas.`;
             alertContainer.appendChild(alertBox);
@@ -119,12 +148,6 @@ async function checkUrgentTasks() {
 
     } catch (error) {
         // Ignora erros de conexão aqui, pois o loadEmpregados já lida com o erro principal
-        console.warn('Alerta: Falha ao checar tarefas urgentes.');
+        console.warn('Alerta: Falha ao checar tarefas urgentes. A API pode estar indisponível ou o endpoint /tarefas/ não existe.', error);
     }
 }
-
-// Roda a checagem a cada 30 segundos
-setInterval(checkUrgentTasks, 30000);
-
-// Força a checagem imediata na inicialização
-checkUrgentTasks();
