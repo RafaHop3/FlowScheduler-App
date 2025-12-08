@@ -4,12 +4,21 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import List, Optional
 
-from database import get_db
+# Importa as ferramentas do banco
+from database import get_db, engine
 from models import Base, Empregado, Tarefa
 
-app = FastAPI(title="Flow Scheduler API (Open)")
+# ==========================================================
+# ☢️ LIMPEZA AUTOMÁTICA DO BANCO (Para corrigir erros)
+# ==========================================================
+# Isso apaga as tabelas antigas e cria novas limpas ao iniciar
+Base.metadata.drop_all(bind=engine) 
+Base.metadata.create_all(bind=engine)
+# ==========================================================
 
-# Configuração CORS (Permite tudo para evitar dor de cabeça)
+app = FastAPI(title="Flow Scheduler API (Demo Mode)")
+
+# Configuração CORS (Liberado para funcionar sem erros)
 origins = ["*"]
 
 app.add_middleware(
@@ -20,7 +29,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- SCHEMAS ---
+# --- SCHEMAS DE DADOS ---
+
 class EmpregadoSchema(BaseModel):
     id: int
     nome: str
@@ -51,9 +61,9 @@ class TarefaCreate(BaseModel):
 
 @app.get("/")
 def read_root():
-    return {"message": "API Rodando sem Login (Modo Demonstração)"}
+    return {"message": "Sistema rodando 100% limpo para Screenshots!"}
 
-# --- ROTAS EMPREGADOS ---
+# --- ROTAS DE EMPREGADOS ---
 
 @app.get("/empregados/", response_model=List[EmpregadoSchema])
 def listar_empregados(db: Session = Depends(get_db)):
@@ -61,7 +71,12 @@ def listar_empregados(db: Session = Depends(get_db)):
 
 @app.post("/empregados/", response_model=EmpregadoSchema)
 def criar_empregado(empregado: EmpregadoCreate, db: Session = Depends(get_db)):
-    db_emp = Empregado(nome=empregado.nome, cargo=empregado.cargo, email=empregado.email)
+    # Cria o empregado no banco
+    db_emp = Empregado(
+        nome=empregado.nome,
+        cargo=empregado.cargo,
+        email=empregado.email
+    )
     db.add(db_emp)
     db.commit()
     db.refresh(db_emp)
@@ -75,7 +90,7 @@ def deletar_empregado(empregado_id: int, db: Session = Depends(get_db)):
         db.commit()
     return {"message": "Deletado"}
 
-# --- ROTAS TAREFAS ---
+# --- ROTAS DE TAREFAS ---
 
 @app.get("/tarefas/", response_model=List[TarefaSchema])
 def listar_tarefas(db: Session = Depends(get_db)):
