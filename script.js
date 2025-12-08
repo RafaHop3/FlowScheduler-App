@@ -1,5 +1,5 @@
-// ✅ CORREÇÃO CRÍTICA: Substituído o localhost pela URL pública do Render.
-const API_BASE_URL = 'https://flowscheduler-app.onrender.com';
+// ✅ CORREÇÃO CRÍTICA: Atualizada para a nova URL do Render (com o final -1)
+const API_BASE_URL = 'https://flowscheduler-app-1.onrender.com';
 
 // Define loadEmpregados fora do DOMContentLoaded para que possa ser usada globalmente
 // e para evitar erros de escopo.
@@ -8,7 +8,7 @@ async function loadEmpregados() {
         // Acessa o endpoint /empregados/
         const response = await fetch(`${API_BASE_URL}/empregados/`);
         
-        // CRÍTICO: Se houver um erro, é provável que seja CORS ou API offline/erro interno.
+        // Se houver um erro, é provável que seja CORS ou API offline/erro interno.
         if (!response.ok) {
             throw new Error(`Erro ao buscar dados da API: ${response.status} - Verifique a aba Rede no console.`);
         }
