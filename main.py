@@ -1,29 +1,63 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import List, Optional
+from datetime import datetime, timedelta
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+import os
 
-# Importa funções de persistência e injeção de dependência
-from database import (
-    get_db, 
-    get_empregados, get_empregado_by_id, create_empregado, update_empregado, delete_empregado,
-    get_tarefas, get_tarefa_by_id, create_tarefa, update_tarefa, delete_tarefa,
-    get_tarefas_by_empregado_id
+# Importa database e models
+from database import get_db
+# Certifique-se de que seu arquivo models.py já tenha os campos senha_hash e funcao
+from models import Base, Empregado, Tarefa
+
+# --- CONFIGURAÇÃO DE SEGURANÇA ---
+SECRET_KEY = "segredo-super-secreto-mude-isso-em-producao" 
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+app = FastAPI(title="Flow Scheduler API (Seguro)")
+
+# ✅ LISTA DE ORIGENS PERMITIDAS (CORS)
+origins = [
+    "http://localhost:8000",
+    "http://127.0.0.1:5500", 
+    "https://flowscheduler-app-1.onrender.com",
+    "https://flow-scheduler-web.onrender.com", 
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# -----------------------------------------------------------------
-# --- Schemas de Saída (Output) ---
-# -----------------------------------------------------------------
+# --- SCHEMAS (Pydantic) ---
 
+# Schema para criar conta (com senha)
+class EmpregadoCreate(BaseModel):
+    nome: str
+    cargo: str
+    email: str
+    senha: str 
+
+# Schema de resposta (SEM senha)
 class EmpregadoSchema(BaseModel):
     id: int
     nome: str
     cargo: str
     email: str
-    
+    funcao: str
     class Config:
-        from_attributes = True # ✅ Pydantic V2 usa from_attributes
+        from_attributes = True
 
 class TarefaSchema(BaseModel):
     id: int
@@ -32,158 +66,150 @@ class TarefaSchema(BaseModel):
     prazo: str
     empregado_id: Optional[int] = None
     concluida: bool = False
-    
     class Config:
-        from_attributes = True # ✅ Pydantic V2 usa from_attributes
+        from_attributes = True
 
-# -----------------------------------------------------------------
-# --- Schemas de Entrada (Input) e Atualização ---
-# -----------------------------------------------------------------
-
-class EmpregadoCreate(BaseModel):
-    nome: str
-    cargo: str
-    email: str
-
-class TarefaBase(BaseModel):
+class TarefaCreate(BaseModel):
     titulo: str
-    descricao: Optional[str] = None
     prazo: str
     empregado_id: Optional[int] = None
     concluida: bool = False
 
-class EmpregadoUpdate(BaseModel):
-    nome: Optional[str] = None
-    cargo: Optional[str] = None
-    email: Optional[str] = None
+class Token(BaseModel):
+    access_token: str
+    token_type: str
 
-class TarefaUpdate(BaseModel):
-    titulo: Optional[str] = None
-    descricao: Optional[str] = None
-    prazo: Optional[str] = None
-    empregado_id: Optional[int] = None
-    concluida: Optional[bool] = None
+# --- FUNÇÕES DE SEGURANÇA ---
 
+def get_password_hash(password):
+    return pwd_context.hash(password)
 
-# -----------------------------------------------------------------
-# --- Configuração do FastAPI (CORS CRÍTICO) ---
-# -----------------------------------------------------------------
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(plain_password, hashed_password)
 
-app = FastAPI(title="Flow Scheduler API")
+def create_access_token(data: dict):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
-# ✅ LISTA DE ORIGENS PERMITIDAS (CORS)
-# Adicionei aqui o seu site e a sua API atualizada.
-origins = [
-    "http://localhost:8000",
-    "http://127.0.0.1:8000",
-    "http://127.0.0.1:5500", 
-    "https://flowscheduler-app-1.onrender.com", # Sua API Backend
-    "https://flow-scheduler-web.onrender.com",  # <--- SEU SITE FRONTEND (CRÍTICO PARA FUNCIONAR)
-]
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins, 
-    allow_credentials=True,
-    allow_methods=["*"], 
-    allow_headers=["*"],
-)
-# -----------------------------------------------------------------
-
+# --- DEPENDÊNCIA: PEGAR USUÁRIO LOGADO ---
+async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Não foi possível validar as credenciais",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        if email is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+        
+    user = db.query(Empregado).filter(Empregado.email == email).first()
+    if user is None:
+        raise credentials_exception
+    return user
 
 @app.get("/", tags=["Root"])
 def read_root():
-    return {"message": "Flow Scheduler API está online! Acesse /docs para a documentação."}
+    return {"message": "Flow Scheduler API Segura está online!"}
 
+# --- ROTAS PÚBLICAS (Login e Registro) ---
 
-# -----------------------------------------------------------------
-# --- Endpoints de Empregados (CRUD Completo) ---
-# -----------------------------------------------------------------
+@app.post("/token", response_model=Token)
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    user = db.query(Empregado).filter(Empregado.email == form_data.username).first()
+    if not user or not verify_password(form_data.password, user.senha_hash):
+        raise HTTPException(status_code=400, detail="Email ou senha incorretos")
+    
+    access_token = create_access_token(data={"sub": user.email, "role": user.funcao, "id": user.id})
+    return {"access_token": access_token, "token_type": "bearer"}
 
-@app.get("/empregados/", response_model=List[EmpregadoSchema], tags=["Empregados"])
-def listar_empregados_api(db: Session = Depends(get_db)):
-    """[GET] Lista todos os empregados cadastrados."""
-    return get_empregados(db)
+@app.post("/empregados/registrar", response_model=EmpregadoSchema)
+def registrar_empregado(empregado: EmpregadoCreate, db: Session = Depends(get_db)):
+    if db.query(Empregado).filter(Empregado.email == empregado.email).first():
+        raise HTTPException(status_code=400, detail="Email já cadastrado")
 
-@app.post("/empregados/", response_model=EmpregadoSchema, tags=["Empregados"], status_code=201)
-def criar_empregado_api(empregado: EmpregadoCreate, db: Session = Depends(get_db)):
-    """[POST] Cria um novo empregado."""
-    return create_empregado(db, empregado)
+    hashed_password = get_password_hash(empregado.senha)
+    
+    # O primeiro usuário vira Admin
+    count = db.query(Empregado).count()
+    role = "admin" if count == 0 else "user"
 
-@app.put("/empregados/{empregado_id}", response_model=EmpregadoSchema, tags=["Empregados"])
-def atualizar_empregado_api(empregado_id: int, empregado: EmpregadoUpdate, db: Session = Depends(get_db)):
-    """[PUT] Atualiza TODAS as informações de um empregado."""
-    db_empregado = get_empregado_by_id(db, empregado_id)
-    if not db_empregado:
-        raise HTTPException(status_code=404, detail="Empregado não encontrado.")
+    novo_emp = Empregado(
+        nome=empregado.nome,
+        cargo=empregado.cargo,
+        email=empregado.email,
+        senha_hash=hashed_password,
+        funcao=role
+    )
+    db.add(novo_emp)
+    db.commit()
+    db.refresh(novo_emp)
+    return novo_emp
+
+# --- ROTAS PROTEGIDAS ---
+
+@app.get("/empregados/", response_model=List[EmpregadoSchema])
+def listar_todos_empregados(db: Session = Depends(get_db), current_user: Empregado = Depends(get_current_user)):
+    # Só ADMIN vê todos. User vê só a si mesmo.
+    if current_user.funcao == "admin":
+        return db.query(Empregado).all()
+    else:
+        return [current_user]
+
+@app.delete("/empregados/{empregado_id}")
+def deletar_empregado(empregado_id: int, db: Session = Depends(get_db), current_user: Empregado = Depends(get_current_user)):
+    if current_user.funcao != "admin":
+        raise HTTPException(status_code=403, detail="Apenas admins podem excluir usuários")
+    
+    emp = db.query(Empregado).filter(Empregado.id == empregado_id).first()
+    if not emp:
+        raise HTTPException(status_code=404, detail="Empregado não encontrado")
         
-    return update_empregado(db, db_empregado, empregado)
+    db.delete(emp)
+    db.commit()
+    return {"message": "Empregado deletado"}
 
-@app.delete("/empregados/{empregado_id}", tags=["Empregados"])
-def deletar_empregado_api(empregado_id: int, db: Session = Depends(get_db)):
-    """[DELETE] Deleta um empregado pelo ID."""
-    db_empregado = get_empregado_by_id(db, empregado_id)
-    if not db_empregado:
-        raise HTTPException(status_code=404, detail="Empregado não encontrado.")
-        
-    return delete_empregado(db, db_empregado)
+# --- TAREFAS ---
 
+@app.get("/tarefas/", response_model=List[TarefaSchema])
+def listar_tarefas(db: Session = Depends(get_db), current_user: Empregado = Depends(get_current_user)):
+    if current_user.funcao == "admin":
+        return db.query(Tarefa).all()
+    else:
+        return db.query(Tarefa).filter(Tarefa.empregado_id == current_user.id).all()
 
-# -----------------------------------------------------------------
-# --- Endpoints de Tarefas (CRUD Completo) ---
-# -----------------------------------------------------------------
-
-@app.get("/tarefas/", response_model=List[TarefaSchema], tags=["Tarefas"])
-def listar_tarefas_api(db: Session = Depends(get_db)):
-    """[GET] Lista todas as tarefas."""
-    return get_tarefas(db)
-
-# --- NOVO ENDPOINT DE FILTRO POR EMPREGADO ---
-
-@app.get("/tarefas/empregado/{empregado_id}", response_model=List[TarefaSchema], tags=["Tarefas"])
-def listar_tarefas_por_empregado_api(empregado_id: int, db: Session = Depends(get_db)):
-    """[GET] Lista todas as tarefas atribuídas a um empregado específico."""
+@app.post("/tarefas/", response_model=TarefaSchema)
+def criar_tarefa(tarefa: TarefaCreate, db: Session = Depends(get_db), current_user: Empregado = Depends(get_current_user)):
+    # Se for Admin e mandou ID, usa o ID. Se não, usa o ID do usuário logado.
+    dono_id = current_user.id
+    if current_user.funcao == "admin" and tarefa.empregado_id:
+        dono_id = tarefa.empregado_id
     
-    # 1. Checa se o empregado existe
-    if not get_empregado_by_id(db, empregado_id):
-        raise HTTPException(status_code=404, detail="Empregado não encontrado.")
+    nova_tarefa = Tarefa(
+        titulo=tarefa.titulo,
+        prazo=tarefa.prazo,
+        concluida=tarefa.concluida,
+        empregado_id=dono_id
+    )
+    db.add(nova_tarefa)
+    db.commit()
+    db.refresh(nova_tarefa)
+    return nova_tarefa
+
+@app.delete("/tarefas/{tarefa_id}")
+def deletar_tarefa(tarefa_id: int, db: Session = Depends(get_db), current_user: Empregado = Depends(get_current_user)):
+    tarefa = db.query(Tarefa).filter(Tarefa.id == tarefa_id).first()
+    if not tarefa:
+        raise HTTPException(status_code=404, detail="Tarefa não encontrada")
     
-    # 2. Busca as tarefas usando a nova função no database.py
-    tarefas = get_tarefas_by_empregado_id(db, empregado_id)
-    return tarefas
+    if current_user.funcao != "admin" and tarefa.empregado_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Sem permissão")
 
-# ---------------------------------------------
-
-@app.post("/tarefas/", response_model=TarefaSchema, tags=["Tarefas"], status_code=201)
-def criar_tarefa_api(tarefa: TarefaBase, db: Session = Depends(get_db)):
-    """[POST] Cria uma nova tarefa."""
-    
-    # Validação: Se um empregado_id é fornecido, ele deve existir
-    if tarefa.empregado_id:
-        if not get_empregado_by_id(db, tarefa.empregado_id):
-            raise HTTPException(status_code=404, detail="Empregado_id não encontrado.")
-            
-    return create_tarefa(db, tarefa)
-
-@app.put("/tarefas/{tarefa_id}", response_model=TarefaSchema, tags=["Tarefas"])
-def atualizar_tarefa_api(tarefa_id: int, tarefa: TarefaUpdate, db: Session = Depends(get_db)):
-    """[PUT] Atualiza TODAS as informações de uma tarefa."""
-    db_tarefa = get_tarefa_by_id(db, tarefa_id)
-    if not db_tarefa:
-        raise HTTPException(status_code=404, detail="Tarefa não encontrada.")
-    
-    # Validação de FK
-    if tarefa.empregado_id is not None:
-        if not get_empregado_by_id(db, tarefa.empregado_id):
-            raise HTTPException(status_code=404, detail="Empregado_id não encontrado para atribuição.")
-
-    return update_tarefa(db, db_tarefa, tarefa)
-
-@app.delete("/tarefas/{tarefa_id}", tags=["Tarefas"])
-def deletar_tarefa_api(tarefa_id: int, db: Session = Depends(get_db)):
-    """[DELETE] Deleta uma tarefa pelo ID."""
-    db_tarefa = get_tarefa_by_id(db, tarefa_id)
-    if not db_tarefa:
-        raise HTTPException(status_code=404, detail="Tarefa não encontrada.")
-        
-    return delete_tarefa(db, db_tarefa)
+    db.delete(tarefa)
+    db.commit()
+    return {"message": "Tarefa deletada"}
