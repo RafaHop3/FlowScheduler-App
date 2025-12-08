@@ -1,0 +1,5 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+pydantic
+psycopg2-binary  # CRÍTICO: Necessário para o PostgreSQL do Railway
