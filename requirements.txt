@@ -1,5 +1,20 @@
+# --- Core da API ---
 fastapi
 uvicorn[standard]
+python-dotenv
+
+# --- Banco de Dados (ORM e Driver) ---
 sqlalchemy
 pydantic
-psycopg2-binary  # CRÍTICO: Necessário para o PostgreSQL do Railway
+# CRÍTICO: Necessário para o PostgreSQL do Render/Railway
+psycopg2-binary 
+
+# --- Segurança e Autenticação (NOVOS) ---
+# Necessário para criptografar as senhas (hash)
+passlib[bcrypt]
+# Necessário para criar e ler os Tokens de acesso (JWT)
+python-jose[cryptography]
+# Necessário para o formulário de login do FastAPI
+python-multipart
+# Necessário para validação de emails no Pydantic
+email-validator
