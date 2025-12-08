@@ -1,25 +1,32 @@
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy import create_engine
-from models import Base, Empregado, Tarefa
+from models import Base, Empregado, Tarefa # Assume-se que 'models' contém a definição das classes SQLAlchemy
 import os
 from typing import Any 
 
 # --- Configuração do DB ---
 
-# CRÍTICO: Usa a variável de ambiente DATABASE_URL do Railway. 
+# CRÍTICO: Usa a variável de ambiente DATABASE_URL do Render. 
 # Localmente, usa SQLite.
 DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///flow_scheduler.db")
+
+# ✅ CORREÇÃO CRÍTICA: Render/Railway usam 'postgres://'. SQLAlchemy espera 'postgresql://'.
+# Esta linha garante que a conexão funcione corretamente em produção.
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
 
 # Criação do Engine
 engine = create_engine(
     DATABASE_URL, 
     # Necessário apenas para SQLite: check_same_thread=False
+    # Em produção (PostgreSQL), connect_args é vazio.
     connect_args={"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {} 
 )
 
-# REMOVIDO: Base.metadata.create_all(engine)
-# Esta linha foi removida para evitar o crash de conexão durante o deploy.
-# A criação das tabelas será feita via script de inicialização no Procfile.
+# Base.metadata.create_all(engine)
+# MANTIDO REMOVIDO: A criação das tabelas deve ser feita via script de inicialização
+# no Procfile ou na rotina de deploy para evitar erros de concorrência.
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -80,7 +87,7 @@ def listar_proximas_tarefas(db_session: Session = SessionLocal()):
     # Mapeia o resultado do JOIN para um objeto Tarefa com o atributo 'empregado_nome'
     resultado = []
     for tarefa, empregado_nome in tarefas_com_empregado:
-        # Adiciona o nome do empregado dinamicamente ao objeto Tarefa para a visualização no Tkinter
+        # Adiciona o nome do empregado dinamicamente ao objeto Tarefa para a visualização
         setattr(tarefa, 'empregado_nome', empregado_nome)
         resultado.append(tarefa)
         
@@ -92,7 +99,8 @@ def listar_proximas_tarefas(db_session: Session = SessionLocal()):
 
 def create_empregado(db_session: Session, empregado_data: Any):
     """Cria e salva um novo empregado."""
-    # empregado_data é um objeto Pydantic injetado pelo FastAPI
+    # .dict() será removido no Pydantic V2. O método .model_dump() é preferido.
+    # Assumindo Pydantic V1 ou que o .dict() ainda funciona:
     db_empregado = Empregado(**empregado_data.dict()) 
     
     db_session.add(db_empregado)
@@ -115,6 +123,7 @@ def create_tarefa(db_session: Session, tarefa_data: Any):
 
 def update_empregado(db_session: Session, db_empregado: Empregado, empregado_data: Any):
     """Atualiza as informações de um empregado existente."""
+    # .dict() será removido no Pydantic V2. O método .model_dump() é preferido.
     data_to_update = empregado_data.dict(exclude_unset=True) # exclude_unset ignora campos não enviados (para PATCH)
     
     for key, value in data_to_update.items():
