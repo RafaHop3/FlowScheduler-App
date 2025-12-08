@@ -1,34 +1,35 @@
-# app.py (VERSÃO FINAL REFATORADA PARA USAR A API FASTAPI)
-
+# app.py (VERSÃO FINAL MAXIMIZADA E REFINADA, COM CORREÇÃO DE GRID/PACK)
 import tkinter as tk
 from tkinter import messagebox
 import ttkbootstrap as ttk 
-import requests # Para fazer chamadas HTTP à API
-import json
-from typing import Optional
 
-# --- CONFIGURAÇÃO CRÍTICA DA API ---
-# Em produção, substitua pelo domínio do Railway (Ex: 'https://flow-scheduler-xxxx.up.railway.app')
-API_BASE_URL = 'http://localhost:8000' 
+# Importações completas do database
+from database import (
+    adicionar_empregado, listar_empregados, atualizar_empregado, deletar_empregado, 
+    buscar_empregado_por_id, adicionar_tarefa, listar_tarefas, atualizar_tarefa, 
+    deletar_tarefa, buscar_tarefa_por_id, listar_proximas_tarefas 
+)
 
-# -----------------------------------------------------------------
 # --- Estrutura de Telas (Views) ---
-# -----------------------------------------------------------------
 
 class FlowSchedulerApp(ttk.Window):
     """Classe principal da aplicação Desktop Flow Scheduler."""
     def __init__(self):
         super().__init__(themename="cosmo") 
         self.title("Flow Scheduler - Gestão de Carga de Trabalho")
+        
+        # MAXIMIZAÇÃO (Tela expandida)
         self.state('zoomed') 
+        
         container = ttk.Frame(self)
-        container.pack(fill="both", expand=True) 
+        container.pack(fill="both", expand=True) # O container principal AINDA usa pack
         self.frames = {}
         for F in (DashboardView, EmpregadosView, TarefasView):
             page_name = F.__name__
             frame = F(parent=container, controller=self)
             frame.grid(row=0, column=0, sticky="nsew")
             self.frames[page_name] = frame
+        
         self.show_frame("DashboardView")
 
     def show_frame(self, page_name):
@@ -45,31 +46,44 @@ class BaseView(ttk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
         self.controller = controller
+        
+        # CORREÇÃO CRÍTICA: O botão agora usa GRID (Tiramos o pack)
         home_button = ttk.Button(self, text="<< Dashboard Principal", command=controller.go_to_home, bootstyle="secondary")
         home_button.grid(row=0, column=0, pady=10, padx=10, sticky="nw")
-        self.grid_rowconfigure(0, weight=0) 
-        self.grid_rowconfigure(1, weight=1) 
-        self.grid_columnconfigure(0, weight=1) 
+        
+        # Configuração do Grid para suportar o botão Home e o conteúdo abaixo
+        self.grid_rowconfigure(0, weight=0) # Linha do botão Home (não expande)
+        self.grid_rowconfigure(1, weight=1) # Linha do conteúdo principal (expande)
+        self.grid_columnconfigure(0, weight=1) # Coluna de conteúdo expande
 
 class DashboardView(BaseView):
     """Tela principal com opções de navegação e visualização de status."""
     def __init__(self, parent, controller):
         super().__init__(parent, controller)
+
+        # Usamos um Frame interno para o conteúdo principal (abaixo do botão Home)
         main_content_frame = ttk.Frame(self)
         main_content_frame.grid(row=1, column=0, sticky="nsew", padx=20, pady=20) 
+
+        # Configuração do Grid interno para a Divisão (Navegação Col 0, Preview Col 1)
         main_content_frame.grid_rowconfigure(0, weight=1)
         main_content_frame.grid_columnconfigure(0, weight=1)
         main_content_frame.grid_columnconfigure(1, weight=1)
-        
+
         # --- Painel de Navegação (Coluna 0) ---
         nav_frame = ttk.Frame(main_content_frame)
         nav_frame.grid(row=0, column=0, padx=50, pady=50, sticky="nsew")
+        
+        # Centralizando os elementos dentro do nav_frame 
         nav_frame.grid_rowconfigure(0, weight=1) 
         nav_frame.grid_rowconfigure(4, weight=1) 
         nav_frame.grid_columnconfigure(0, weight=1)
+
         ttk.Label(nav_frame, text="DASHBOARD PRINCIPAL", font=("Arial", 24)).grid(row=1, column=0, pady=20)
+        
         ttk.Button(nav_frame, text="Gerenciar Empregados", bootstyle="primary",
                    command=lambda: controller.show_frame("EmpregadosView")).grid(row=2, column=0, pady=10, sticky="ew")
+        
         ttk.Button(nav_frame, text="Gerenciar Tarefas e Atribuições", bootstyle="primary",
                    command=lambda: controller.show_frame("TarefasView")).grid(row=3, column=0, pady=10, sticky="ew")
 
@@ -77,59 +91,47 @@ class DashboardView(BaseView):
         self.preview_frame = ttk.Frame(main_content_frame, bootstyle="info", width=350)
         self.preview_frame.grid(row=0, column=1, padx=50, pady=50, sticky="nsew")
         self.preview_frame.grid_columnconfigure(0, weight=1)
+        
         ttk.Label(self.preview_frame, text="🚨 PRÓXIMAS TAREFAS PENDENTES 🚨", font=("Arial", 14), bootstyle="inverse-info").grid(row=0, column=0, sticky="ew", pady=(10, 5), padx=5)
+        
         self.lista_urgente = ttk.Frame(self.preview_frame)
         self.lista_urgente.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
 
     def atualizar_preview(self):
-        """Busca as tarefas urgentes e as exibe no painel lateral usando a API."""
+        """Busca as tarefas urgentes e as exibe no painel lateral."""
+        
         for widget in self.lista_urgente.winfo_children():
             widget.destroy()
             
-        try:
-            # Requisita todas as tarefas (GET /tarefas/)
-            response = requests.get(f"{API_BASE_URL}/tarefas/")
-            response.raise_for_status()
-            tarefas = response.json()
+        tarefas = listar_proximas_tarefas()
+        
+        if not tarefas:
+            ttk.Label(self.lista_urgente, text="🎉 Nenhuma tarefa urgente encontrada!").pack(pady=20)
+            return
+
+        # Cabeçalhos
+        ttk.Label(self.lista_urgente, text="Prazo", font=("Arial", 10, "bold")).grid(row=0, column=0, padx=5, sticky="w")
+        ttk.Label(self.lista_urgente, text="Tarefa", font=("Arial", 10, "bold")).grid(row=0, column=1, padx=5, sticky="w")
+        ttk.Label(self.lista_urgente, text="Responsável", font=("Arial", 10, "bold")).grid(row=0, column=2, padx=5, sticky="w")
+
+        # Exibe as tarefas
+        for i, t in enumerate(tarefas, start=1):
+            cor = "danger" if i == 1 else "warning" if i == 2 else "light"
             
-            # Filtra 5 tarefas pendentes, ordenando por prazo (simulando a lógica do backend)
-            tarefas_pendentes = sorted(
-                [t for t in tarefas if not t.get('concluida', False)], 
-                key=lambda x: x.get('prazo', '9999-12-31')
-            )[:5]
+            ttk.Label(self.lista_urgente, text=t.prazo, font=("Arial", 9), bootstyle=cor).grid(row=i, column=0, padx=5, pady=2, sticky="w")
+            ttk.Label(self.lista_urgente, text=t.titulo, font=("Arial", 9)).grid(row=i, column=1, padx=5, pady=2, sticky="w")
+            ttk.Label(self.lista_urgente, text=t.empregado_nome or "N/A", font=("Arial", 9)).grid(row=i, column=2, padx=5, pady=2, sticky="w")
 
-            if not tarefas_pendentes:
-                ttk.Label(self.lista_urgente, text="🎉 Nenhuma tarefa urgente encontrada!").pack(pady=20)
-                return
-
-            # Cabeçalhos
-            ttk.Label(self.lista_urgente, text="Prazo", font=("Arial", 10, "bold")).grid(row=0, column=0, padx=5, sticky="w")
-            ttk.Label(self.lista_urgente, text="Tarefa", font=("Arial", 10, "bold")).grid(row=0, column=1, padx=5, sticky="w")
-            ttk.Label(self.lista_urgente, text="Responsável", font=("Arial", 10, "bold")).grid(row=0, column=2, padx=5, sticky="w")
-
-            # Exibe as tarefas
-            for i, t in enumerate(tarefas_pendentes, start=1):
-                cor = "danger" if i == 1 else "warning" if i == 2 else "light"
-                
-                # Usa o 'empregado_nome' retornado pela otimização no database.py
-                empregado_nome = t.get('empregado_nome') or 'N/A' 
-                
-                ttk.Label(self.lista_urgente, text=t.get('prazo', 'N/A'), font=("Arial", 9), bootstyle=cor).grid(row=i, column=0, padx=5, pady=2, sticky="w")
-                ttk.Label(self.lista_urgente, text=t.get('titulo', 'N/A'), font=("Arial", 9)).grid(row=i, column=1, padx=5, pady=2, sticky="w")
-                ttk.Label(self.lista_urgente, text=empregado_nome, font=("Arial", 9)).grid(row=i, column=2, padx=5, pady=2, sticky="w")
-                
-        except requests.exceptions.RequestException as e:
-            ttk.Label(self.lista_urgente, text=f"Erro API: {e}").pack(pady=20)
-
-
-# --- EmpregadosView (Refatorado) ---
+# --- EmpregadosView ---
 class EmpregadosView(BaseView):
     """Tela para CRUD de Empregados."""
     def __init__(self, parent, controller):
         super().__init__(parent, controller)
         
+        # Usamos um Frame interno (content_frame) para usar .pack() sem conflito com o Grid da BaseView
         content_frame = ttk.Frame(self)
         content_frame.grid(row=1, column=0, sticky="nsew") 
+        
         ttk.Label(content_frame, text="GERENCIAMENTO DE EMPREGADOS", font=("Arial", 18)).pack(pady=10)
 
         colunas = ('id', 'nome', 'cargo', 'email')
@@ -155,25 +157,19 @@ class EmpregadosView(BaseView):
         
         self.atualizar_lista()
 
-    # --- MÉTODO CORRIGIDO: LISTAR (GET /empregados/) ---
+    # ... (Restante dos métodos da EmpregadosView) ...
     def atualizar_lista(self):
         for item in self.tree.get_children():
             self.tree.delete(item)
             
-        try:
-            response = requests.get(f"{API_BASE_URL}/empregados/")
-            response.raise_for_status() 
-            empregados = response.json()
-            
-            if not empregados:
-                self.tree.insert('', tk.END, values=('Nenhum empregado cadastrado.', '', '', ''), tags=('empty',))
-            else:
-                for e in empregados:
-                    self.tree.insert('', tk.END, values=(e['id'], e['nome'], e['cargo'], e['email']))
-        except requests.exceptions.RequestException as e:
-            messagebox.showerror("Erro de API", f"Falha ao listar empregados: {e}")
-
-    # --- MÉTODO CORRIGIDO: ADICIONAR (POST /empregados/) ---
+        empregados = listar_empregados()
+        
+        if not empregados:
+            self.tree.insert('', tk.END, values=('Nenhum empregado cadastrado.', '', '', ''), tags=('empty',))
+        else:
+            for e in empregados:
+                self.tree.insert('', tk.END, values=(e.id, e.nome, e.cargo, e.email))
+    
     def abrir_formulario_adicionar(self):
         janela_form = tk.Toplevel(self)
         janela_form.title("Adicionar Empregado")
@@ -182,9 +178,11 @@ class EmpregadosView(BaseView):
         ttk.Label(janela_form, text="Nome:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
         nome_entry = ttk.Entry(janela_form)
         nome_entry.grid(row=0, column=1, padx=5, pady=5)
+        
         ttk.Label(janela_form, text="Cargo:").grid(row=1, column=0, padx=5, pady=5, sticky="w")
         cargo_entry = ttk.Entry(janela_form)
         cargo_entry.grid(row=1, column=1, padx=5, pady=5)
+        
         ttk.Label(janela_form, text="Email:").grid(row=2, column=0, padx=5, pady=5, sticky="w")
         email_entry = ttk.Entry(janela_form)
         email_entry.grid(row=2, column=1, padx=5, pady=5)
@@ -194,28 +192,18 @@ class EmpregadosView(BaseView):
             cargo = cargo_entry.get()
             email = email_entry.get()
             
-            if not nome or not cargo:
+            if nome and cargo:
+                if adicionar_empregado(nome, cargo, email):
+                    messagebox.showinfo("Sucesso", "Empregado adicionado com sucesso!", parent=janela_form)
+                    self.atualizar_lista()
+                    janela_form.destroy()
+                else:
+                    messagebox.showerror("Erro", "Falha ao adicionar empregado no DB.", parent=janela_form)
+            else:
                 messagebox.showwarning("Atenção", "Preencha Nome e Cargo.", parent=janela_form)
-                return
-
-            novo_empregado = {"nome": nome, "cargo": cargo, "email": email}
-
-            try:
-                response = requests.post(f"{API_BASE_URL}/empregados/", json=novo_empregado)
-                response.raise_for_status() 
-                messagebox.showinfo("Sucesso", "Empregado adicionado com sucesso!", parent=janela_form)
-                self.atualizar_lista()
-                janela_form.destroy()
-            except requests.exceptions.RequestException as e:
-                try:
-                    error_detail = response.json().get("detail", str(e))
-                except (json.JSONDecodeError, UnboundLocalError):
-                    error_detail = str(e)
-                messagebox.showerror("Erro", f"Falha ao adicionar empregado: {error_detail}", parent=janela_form)
 
         ttk.Button(janela_form, text="Salvar", command=submit, bootstyle="success").grid(row=3, column=0, columnspan=2, pady=15)
     
-    # --- MÉTODO CORRIGIDO: EDITAR (GET/PUT /empregados/{id}) ---
     def abrir_formulario_edicao(self):
         selecao = self.tree.selection()
         if not selecao:
@@ -224,33 +212,29 @@ class EmpregadosView(BaseView):
 
         item_selecionado = self.tree.item(selecao[0], 'values')
         empregado_id = item_selecionado[0]
-        
-        try:
-            # 1. Busca o empregado
-            response_get = requests.get(f"{API_BASE_URL}/empregados/{empregado_id}")
-            response_get.raise_for_status()
-            empregado = response_get.json()
-        except requests.exceptions.RequestException as e:
-            messagebox.showerror("Erro", f"Falha ao buscar empregado ID {empregado_id}: {e}")
+        empregado = buscar_empregado_por_id(empregado_id)
+
+        if not empregado:
+            messagebox.showerror("Erro", "Empregado não encontrado.")
             return
 
         janela_form = tk.Toplevel(self)
-        janela_form.title(f"Editar Empregado: {empregado['nome']}")
+        janela_form.title(f"Editar Empregado: {empregado.nome}")
         janela_form.transient(self.controller)
         
         ttk.Label(janela_form, text="Nome:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
         nome_entry = ttk.Entry(janela_form)
-        nome_entry.insert(0, empregado['nome'])
+        nome_entry.insert(0, empregado.nome)
         nome_entry.grid(row=0, column=1, padx=5, pady=5)
         
         ttk.Label(janela_form, text="Cargo:").grid(row=1, column=0, padx=5, pady=5, sticky="w")
         cargo_entry = ttk.Entry(janela_form)
-        cargo_entry.insert(0, empregado['cargo'])
+        cargo_entry.insert(0, empregado.cargo)
         cargo_entry.grid(row=1, column=1, padx=5, pady=5)
 
         ttk.Label(janela_form, text="Email:").grid(row=2, column=0, padx=5, pady=5, sticky="w")
         email_entry = ttk.Entry(janela_form)
-        email_entry.insert(0, empregado['email'])
+        email_entry.insert(0, empregado.email)
         email_entry.grid(row=2, column=1, padx=5, pady=5)
 
         def submit_edicao():
@@ -258,30 +242,18 @@ class EmpregadosView(BaseView):
             novo_cargo = cargo_entry.get()
             novo_email = email_entry.get()
             
-            if not novo_nome or not novo_cargo:
+            if novo_nome and novo_cargo:
+                if atualizar_empregado(empregado_id, novo_nome, novo_cargo, novo_email):
+                    messagebox.showinfo("Sucesso", "Empregado atualizado com sucesso!", parent=janela_form)
+                    self.atualizar_lista()
+                    janela_form.destroy()
+                else:
+                    messagebox.showerror("Erro", "Falha ao atualizar empregado no DB.", parent=janela_form)
+            else:
                 messagebox.showwarning("Atenção", "Preencha Nome e Cargo.", parent=janela_form)
-                return
-            
-            dados_atualizados = {"nome": novo_nome, "cargo": novo_cargo, "email": novo_email}
-
-            try:
-                # 2. Envia a atualização (PUT)
-                response_put = requests.put(f"{API_BASE_URL}/empregados/{empregado_id}", json=dados_atualizados)
-                response_put.raise_for_status()
-                messagebox.showinfo("Sucesso", "Empregado atualizado com sucesso!", parent=janela_form)
-                self.atualizar_lista()
-                janela_form.destroy()
-            except requests.exceptions.RequestException as e:
-                try:
-                    error_detail = response_put.json().get("detail", str(e))
-                except (json.JSONDecodeError, UnboundLocalError):
-                    error_detail = str(e)
-                messagebox.showerror("Erro", f"Falha ao atualizar empregado: {error_detail}", parent=janela_form)
-
 
         ttk.Button(janela_form, text="Salvar Alterações", command=submit_edicao, bootstyle="warning").grid(row=3, column=0, columnspan=2, pady=15)
         
-    # --- MÉTODO CORRIGIDO: DELETAR (DELETE /empregados/{id}) ---
     def deletar_empregado(self):
         selecao = self.tree.selection()
         if not selecao:
@@ -299,41 +271,35 @@ class EmpregadosView(BaseView):
         )
         
         if confirmar:
-            try:
-                response = requests.delete(f"{API_BASE_URL}/empregados/{empregado_id}")
-                response.raise_for_status() 
+            if deletar_empregado(empregado_id):
                 messagebox.showinfo("Sucesso", f"Empregado {nome_empregado} deletado com sucesso!")
                 self.atualizar_lista()
-            except requests.exceptions.RequestException as e:
-                try:
-                    error_detail = response.json().get("detail", str(e))
-                except (json.JSONDecodeError, UnboundLocalError):
-                    error_detail = str(e)
-                messagebox.showerror("Erro", f"Falha ao deletar empregado: {error_detail}")
+            else:
+                messagebox.showerror("Erro", "Falha ao deletar empregado no DB.")
 
-# --- TarefasView (Refatorado e Corrigido) ---
-
+# --- TarefasView ---
 class TarefasView(BaseView):
     """Tela para CRUD de Tarefas."""
     def __init__(self, parent, controller):
         super().__init__(parent, controller)
         
+        # Usamos um Frame interno (content_frame) para usar .pack() sem conflito com o Grid da BaseView
         content_frame = ttk.Frame(self)
-        content_frame.grid(row=1, column=0, sticky="nsew")
+        content_frame.grid(row=1, column=0, sticky="nsew") # Colocamos o conteúdo abaixo do botão Home
+        
         ttk.Label(content_frame, text="GERENCIAMENTO DE TAREFAS", font=("Arial", 18)).pack(pady=10)
 
-        # CORREÇÃO: Usando 'empregado_nome' no cabeçalho em vez de 'empregado_id'
-        colunas = ('id', 'titulo', 'prazo', 'empregado_nome', 'concluida') 
+        colunas = ('id', 'titulo', 'prazo', 'empregado', 'concluida')
         self.tree = ttk.Treeview(content_frame, columns=colunas, show='headings', bootstyle="info")
         self.tree.heading('id', text='ID', anchor=tk.W)
         self.tree.heading('titulo', text='Título')
         self.tree.heading('prazo', text='Prazo')
-        self.tree.heading('empregado_nome', text='Atribuído a') 
+        self.tree.heading('empregado', text='Atribuído a')
         self.tree.heading('concluida', text='Concluída')
         self.tree.column('id', width=40, anchor=tk.CENTER)
         self.tree.column('titulo', width=250)
         self.tree.column('prazo', width=100, anchor=tk.CENTER)
-        self.tree.column('empregado_nome', width=150)
+        self.tree.column('empregado', width=150)
         self.tree.column('concluida', width=80, anchor=tk.CENTER)
         self.tree.pack(pady=10, padx=10, fill="both", expand=True)
 
@@ -351,53 +317,37 @@ class TarefasView(BaseView):
         ttk.Button(button_frame, text="Marcar/Desmarcar Concluída", bootstyle="info",
                    command=self.toggle_concluida).pack(side=tk.LEFT, padx=5)
         
-        self.empregados_dict = {}
         self.atualizar_lista()
 
-    # --- MÉTODO CORRIGIDO: LISTAR TAREFAS (GET /tarefas/) ---
     def atualizar_lista(self):
         for item in self.tree.get_children():
             self.tree.delete(item)
             
-        try:
-            response = requests.get(f"{API_BASE_URL}/tarefas/")
-            response.raise_for_status() 
-            tarefas = response.json()
-            
-            if not tarefas:
-                self.tree.insert('', tk.END, values=('Nenhuma tarefa cadastrada.', '', '', '', ''), tags=('empty',))
-            else:
-                for t in tarefas:
-                    status = "✅ SIM" if t['concluida'] else "❌ NÃO"
-                    # Usa o 'empregado_nome' retornado pela otimização no database.py
-                    empregado_nome = t.get('empregado_nome') or "Não Atribuído"
-                    
-                    self.tree.insert('', tk.END, 
-                                     values=(t['id'], t['titulo'], t['prazo'], empregado_nome, status),
-                                     tags=('concluida' if t['concluida'] else 'pendente',)
-                                    )
-        except requests.exceptions.RequestException as e:
-            messagebox.showerror("Erro de API", f"Falha ao listar tarefas: {e}")
+        tarefas = listar_tarefas()
+        
+        if not tarefas:
+            self.tree.insert('', tk.END, values=('Nenhuma tarefa cadastrada.', '', '', '', ''), tags=('empty',))
+        else:
+            for t in tarefas:
+                # Nota: A TarefasView depende que a função listar_tarefas() no database.py retorne 'empregado_nome'.
+                # Assumindo que database.py foi corrigido para buscar o nome do empregado (como no listar_proximas_tarefas).
+                empregado_nome = getattr(t, 'empregado_nome', 'Não Atribuído') if t.empregado_id else "Não Atribuído"
+                status = "✅ SIM" if t.concluida else "❌ NÃO"
+                
+                self.tree.insert('', tk.END, 
+                                 values=(t.id, t.titulo, t.prazo, empregado_nome, status),
+                                 tags=('concluida' if t.concluida else 'pendente',)
+                                )
 
-    # --- MÉTODO CORRIGIDO: BUSCAR EMPREGADOS PARA COMBO (GET /empregados/) ---
     def _carregar_empregados_para_combo(self):
-        try:
-            response = requests.get(f"{API_BASE_URL}/empregados/")
-            response.raise_for_status()
-            empregados = response.json()
-            
-            # Formato: "Nome (ID: X)" -> X
-            self.empregados_dict = {f"{e['nome']} (ID: {e['id']})": e['id'] for e in empregados}
-            empregado_nomes = ["Não Atribuído"] + list(self.empregados_dict.keys())
-            return empregado_nomes
-        except requests.exceptions.RequestException:
-            messagebox.showerror("Erro de API", "Falha ao carregar lista de empregados para atribuição.")
-            return ["Não Atribuído"]
-    
-    # Método auxiliar para criação de formulário (adaptado para JSON)
-    def _criar_formulario_tarefa(self, janela_pai, tarefa_data=None):
+        empregados = listar_empregados()
+        self.empregados_dict = {f"{e.nome} ({e.cargo})": e.id for e in empregados}
+        empregado_nomes = ["Não Atribuído"] + list(self.empregados_dict.keys())
+        return empregado_nomes
+
+    def _criar_formulario_tarefa(self, janela_pai, tarefa_item=None):
         janela_form = tk.Toplevel(janela_pai)
-        janela_form.title("Editar Tarefa" if tarefa_data else "Adicionar Tarefa")
+        janela_form.title("Editar Tarefa" if tarefa_item else "Adicionar Tarefa")
         janela_form.transient(self.controller)
         
         opcoes_empregados = self._carregar_empregados_para_combo()
@@ -422,26 +372,25 @@ class TarefasView(BaseView):
 
         concluida_var = tk.BooleanVar(janela_form)
         
-        if tarefa_data:
-            tarefa_completa = tarefa_data
-            
+        if tarefa_item:
+            tarefa_id = tarefa_item[0]
+            tarefa_completa = buscar_tarefa_por_id(tarefa_id) 
+
             ttk.Label(janela_form, text="Concluída:").grid(row=4, column=0, padx=5, pady=5, sticky="w")
             concluida_check = ttk.Checkbutton(janela_form, variable=concluida_var, bootstyle="round-toggle")
             concluida_check.grid(row=4, column=1, padx=5, pady=5, sticky="w")
 
-            titulo_entry.insert(0, tarefa_completa['titulo'])
-            descricao_entry.insert('1.0', tarefa_completa['descricao'] or '')
-            prazo_entry.insert(0, tarefa_completa['prazo'])
-            concluida_var.set(tarefa_completa['concluida'])
+            titulo_entry.insert(0, tarefa_completa.titulo)
+            descricao_entry.insert('1.0', tarefa_completa.descricao)
+            prazo_entry.insert(0, tarefa_completa.prazo)
+            concluida_var.set(tarefa_completa.concluida)
             
-            if tarefa_completa['empregado_id']:
-                # Mapeia o ID de volta para o nome completo para preencher o combobox
-                nome_completo = next((nome for nome, id_val in self.empregados_dict.items() if id_val == tarefa_completa['empregado_id']), "Não Atribuído")
+            if tarefa_completa.empregado_id:
+                nome_completo = next((nome for nome, id_val in self.empregados_dict.items() if id_val == tarefa_completa.empregado_id), "Não Atribuído")
                 empregado_combo.set(nome_completo)
             
         return janela_form, titulo_entry, descricao_entry, prazo_entry, empregado_var, concluida_var
     
-    # --- MÉTODO CORRIGIDO: ADICIONAR TAREFA (POST /tarefas/) ---
     def abrir_formulario_adicionar(self):
         janela_form, titulo_entry, descricao_entry, prazo_entry, empregado_var, _ = self._criar_formulario_tarefa(self)
         
@@ -452,34 +401,19 @@ class TarefasView(BaseView):
             nome_selecionado = empregado_var.get()
             empregado_id = self.empregados_dict.get(nome_selecionado, None) 
             
-            if not titulo or not prazo:
+            if titulo and prazo:
+                if adicionar_tarefa(titulo, descricao, prazo, empregado_id):
+                    messagebox.showinfo("Sucesso", "Tarefa adicionada com sucesso!", parent=janela_form)
+                    self.atualizar_lista()
+                    janela_form.destroy()
+                else:
+                    messagebox.showerror("Erro", "Falha ao adicionar tarefa no DB.", parent=janela_form)
+            else:
                 messagebox.showwarning("Atenção", "Preencha Título e Prazo.", parent=janela_form)
-                return
 
-            nova_tarefa = {
-                "titulo": titulo, 
-                "descricao": descricao, 
-                "prazo": prazo, 
-                "empregado_id": empregado_id
-            }
-            
-            try:
-                response = requests.post(f"{API_BASE_URL}/tarefas/", json=nova_tarefa)
-                response.raise_for_status()
-                messagebox.showinfo("Sucesso", "Tarefa adicionada com sucesso!", parent=janela_form)
-                self.atualizar_lista()
-                janela_form.destroy()
-            except requests.exceptions.RequestException as e:
-                try:
-                    error_detail = response.json().get("detail", str(e))
-                except (json.JSONDecodeError, UnboundLocalError):
-                    error_detail = str(e)
-                messagebox.showerror("Erro", f"Falha ao adicionar tarefa: {error_detail}", parent=janela_form)
-
-
+        # CORREÇÃO CRÍTICA: O botão agora está na indentação correta
         ttk.Button(janela_form, text="Salvar Tarefa", command=submit, bootstyle="success").grid(row=5, column=0, columnspan=2, pady=15)
 
-    # --- MÉTODO CORRIGIDO: EDITAR TAREFA (GET/PUT /tarefas/{id}) ---
     def abrir_formulario_edicao(self):
         selecao = self.tree.selection()
         if not selecao:
@@ -489,16 +423,7 @@ class TarefasView(BaseView):
         item_selecionado = self.tree.item(selecao[0], 'values')
         tarefa_id = item_selecionado[0]
         
-        try:
-            # 1. Busca a tarefa por ID (requer GET /tarefas/{id} na API)
-            response_get = requests.get(f"{API_BASE_URL}/tarefas/{tarefa_id}")
-            response_get.raise_for_status()
-            tarefa_completa = response_get.json()
-        except requests.exceptions.RequestException as e:
-            messagebox.showerror("Erro", f"Falha ao buscar tarefa ID {tarefa_id}: {e}")
-            return
-        
-        janela_form, titulo_entry, descricao_entry, prazo_entry, empregado_var, concluida_var = self._criar_formulario_tarefa(self, tarefa_data=tarefa_completa)
+        janela_form, titulo_entry, descricao_entry, prazo_entry, empregado_var, concluida_var = self._criar_formulario_tarefa(self, tarefa_item=item_selecionado)
         
         def submit_edicao():
             titulo = titulo_entry.get()
@@ -507,37 +432,19 @@ class TarefasView(BaseView):
             nome_selecionado = empregado_var.get()
             empregado_id = self.empregados_dict.get(nome_selecionado, None) 
             concluida = concluida_var.get()
-            
-            if not titulo or not prazo:
+
+            if titulo and prazo:
+                if atualizar_tarefa(tarefa_id, titulo, descricao, prazo, empregado_id, concluida):
+                    messagebox.showinfo("Sucesso", "Tarefa atualizada com sucesso!", parent=janela_form)
+                    self.atualizar_lista()
+                    janela_form.destroy()
+                else:
+                    messagebox.showerror("Erro", "Falha ao atualizar tarefa no DB.", parent=janela_form)
+            else:
                 messagebox.showwarning("Atenção", "Preencha Título e Prazo.", parent=janela_form)
-                return
-
-            dados_atualizados = {
-                "titulo": titulo, 
-                "descricao": descricao, 
-                "prazo": prazo, 
-                "empregado_id": empregado_id,
-                "concluida": concluida
-            }
-
-            try:
-                # 2. Envia a atualização (PUT)
-                response_put = requests.put(f"{API_BASE_URL}/tarefas/{tarefa_id}", json=dados_atualizados)
-                response_put.raise_for_status()
-                messagebox.showinfo("Sucesso", "Tarefa atualizada com sucesso!", parent=janela_form)
-                self.atualizar_lista()
-                janela_form.destroy()
-            except requests.exceptions.RequestException as e:
-                try:
-                    error_detail = response_put.json().get("detail", str(e))
-                except (json.JSONDecodeError, UnboundLocalError):
-                    error_detail = str(e)
-                messagebox.showerror("Erro", f"Falha ao atualizar tarefa: {error_detail}", parent=janela_form)
-
 
         ttk.Button(janela_form, text="Salvar Alterações", command=submit_edicao, bootstyle="warning").grid(row=5, column=0, columnspan=2, pady=15)
 
-    # --- MÉTODO CORRIGIDO: DELETAR TAREFA (DELETE /tarefas/{id}) ---
     def deletar_tarefa(self):
         selecao = self.tree.selection()
         if not selecao:
@@ -555,19 +462,12 @@ class TarefasView(BaseView):
         )
         
         if confirmar:
-            try:
-                response = requests.delete(f"{API_BASE_URL}/tarefas/{tarefa_id}")
-                response.raise_for_status() 
+            if deletar_tarefa(tarefa_id):
                 messagebox.showinfo("Sucesso", f"Tarefa {titulo_tarefa} deletada com sucesso!")
                 self.atualizar_lista()
-            except requests.exceptions.RequestException as e:
-                try:
-                    error_detail = response.json().get("detail", str(e))
-                except (json.JSONDecodeError, UnboundLocalError):
-                    error_detail = str(e)
-                messagebox.showerror("Erro", f"Falha ao deletar tarefa: {error_detail}")
-
-    # --- MÉTODO CORRIGIDO: ALTERNAR STATUS (GET/PUT /tarefas/{id}) ---
+            else:
+                messagebox.showerror("Erro", "Falha ao deletar tarefa no DB.")
+                
     def toggle_concluida(self):
         selecao = self.tree.selection()
         if not selecao:
@@ -579,35 +479,23 @@ class TarefasView(BaseView):
         status_atual_texto = item_selecionado[4] 
         novo_status = True if status_atual_texto == "❌ NÃO" else False
 
-        try:
-            # 1. Busca a tarefa atual para obter todos os campos necessários para o PUT
-            response_get = requests.get(f"{API_BASE_URL}/tarefas/{tarefa_id}")
-            response_get.raise_for_status()
-            tarefa_completa = response_get.json()
-            
-            # 2. Prepara dados para o PUT (usando os dados existentes e apenas alterando 'concluida')
-            dados_atualizados = {
-                "titulo": tarefa_completa['titulo'],
-                "descricao": tarefa_completa['descricao'],
-                "prazo": tarefa_completa['prazo'],
-                "empregado_id": tarefa_completa['empregado_id'],
-                "concluida": novo_status # Única mudança
-            }
-            
-            # 3. Envia a atualização (PUT)
-            response_put = requests.put(f"{API_BASE_URL}/tarefas/{tarefa_id}", json=dados_atualizados)
-            response_put.raise_for_status()
+        tarefa_completa = buscar_tarefa_por_id(tarefa_id)
 
-            messagebox.showinfo("Sucesso", f"Status de '{tarefa_completa['titulo']}' alterado para {'CONCLUÍDA' if novo_status else 'PENDENTE'}.")
-            self.atualizar_lista()
-            
-        except requests.exceptions.RequestException as e:
-            try:
-                error_detail = response_put.json().get("detail", str(e))
-            except (json.JSONDecodeError, UnboundLocalError):
-                error_detail = str(e)
-            messagebox.showerror("Erro", f"Falha ao alterar status da tarefa: {error_detail}")
-
+        if tarefa_completa:
+            if atualizar_tarefa(
+                tarefa_id, 
+                tarefa_completa.titulo, 
+                tarefa_completa.descricao, 
+                tarefa_completa.prazo, 
+                tarefa_completa.empregado_id, 
+                novo_status
+            ):
+                messagebox.showinfo("Sucesso", f"Status de '{tarefa_completa.titulo}' alterado para {'CONCLUÍDA' if novo_status else 'PENDENTE'}.")
+                self.atualizar_lista()
+            else:
+                messagebox.showerror("Erro", "Falha ao alterar status da tarefa.")
+        else:
+            messagebox.showerror("Erro", "Tarefa não encontrada no banco de dados.")
 
 # --- Execução da Aplicação ---
 if __name__ == "__main__":

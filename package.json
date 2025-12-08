@@ -1,11 +1,11 @@
 {
-  "name": "scheduler-flow-web-app",
+  "name": "flowscheduler-app",
   "version": "1.0.0",
   "description": "",
   "main": "script.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "deploy": "gh-pages -d ."  
+    "deploy": "gh-pages -d ."
   },
   "repository": {
     "type": "git",
@@ -18,7 +18,7 @@
   "bugs": {
     "url": "https://github.com/RafaHop3/FlowScheduler-App/issues"
   },
-  "homepage": "https://RafaHop3.github.io/FlowScheduler-App",
+  "homepage": "https://rafahop3.github.io/FlowScheduler-App",
   "devDependencies": {
     "gh-pages": "^6.3.0"
   }

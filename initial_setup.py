@@ -1,4 +1,4 @@
-# initial_setup.py (CORRIGIDO)
+# initial_setup.py
 
 from database import Base, engine
 from models import Empregado, Tarefa # Importa os modelos para garantir que Base os conheça
@@ -30,9 +30,9 @@ def start_server():
     """Inicia o servidor Uvicorn após garantir que o DB está pronto."""
     print("Iniciando o servidor FastAPI...")
     
-    # CORREÇÃO CRÍTICA: Adicionado "python" e "-m" para rodar 'uvicorn' como módulo.
+    # CRÍTICO: Comando que estava no procfile, agora executado via subprocess
     command = [
-        "python", "-m", "uvicorn", 
+        "uvicorn", 
         "main:app", 
         "--host", "0.0.0.0", 
         "--port", os.environ.get("PORT", "8000"), # Usa a variável $PORT do Railway
