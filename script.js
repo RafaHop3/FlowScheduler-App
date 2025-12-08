@@ -1,14 +1,21 @@
-// ✅ URL da sua API no Render
+// ✅ URL da sua API Backend no Render
 const API_BASE_URL = 'https://flowscheduler-app-1.onrender.com';
 
 // Recupera o token salvo no navegador (se existir)
 let authToken = localStorage.getItem('token'); 
 
-// --- INICIALIZAÇÃO ---
+// =======================================================
+// 🚀 INICIALIZAÇÃO DO SISTEMA
+// =======================================================
 document.addEventListener('DOMContentLoaded', () => {
+    
     // 1. Verifica se o usuário já está logado
     if (authToken) {
-        showApp(); // Pula o login e mostra o sistema
+        showApp(); // Se tem token, pula o login e mostra o painel
+    } else {
+        // Garante que a tela de login esteja visível se não houver token
+        document.getElementById('login-screen').style.display = 'flex';
+        document.getElementById('app-screen').style.display = 'none';
     }
 
     // 2. Configura os botões da Tela de Login/Registro
@@ -20,6 +27,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 3. Configura o Sistema Principal (Abas e Formulários Internos)
     setupTabs();
+    setupAlertSystem(); // Configura o container de alertas
 
     const empForm = document.getElementById('empregado-form');
     if (empForm) empForm.addEventListener('submit', handleCreateEmpregado);
@@ -29,7 +37,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // =======================================================
-// 🔐 AUTENTICAÇÃO (LOGIN & TOKEN)
+// 🔐 AUTENTICAÇÃO (LOGIN, REGISTRO & TOKEN)
 // =======================================================
 
 async function handleLogin(e) {
@@ -38,9 +46,9 @@ async function handleLogin(e) {
     const senha = document.getElementById('login-senha').value;
     const msg = document.getElementById('login-msg');
 
-    // O FastAPI OAuth2 espera dados de formulário, não JSON
+    // O FastAPI OAuth2 espera dados de formulário (x-www-form-urlencoded)
     const formData = new URLSearchParams();
-    formData.append('username', email); // FastAPI usa o campo 'username'
+    formData.append('username', email); // FastAPI usa o campo 'username' para o login
     formData.append('password', senha);
 
     try {
@@ -54,14 +62,14 @@ async function handleLogin(e) {
             const data = await response.json();
             authToken = data.access_token;
             localStorage.setItem('token', authToken); // Salva o token
-            msg.textContent = "";
+            if (msg) msg.textContent = "";
             showApp(); // Entra no sistema
         } else {
-            msg.textContent = "Acesso negado: Verifique e-mail e senha.";
+            if (msg) msg.textContent = "Acesso negado: Verifique e-mail e senha.";
         }
     } catch (error) {
         console.error(error);
-        msg.textContent = "Erro de conexão com o servidor.";
+        if (msg) msg.textContent = "Erro de conexão com o servidor.";
     }
 }
 
@@ -83,14 +91,14 @@ async function handleRegister(e) {
         });
 
         if (res.ok) {
-            alert("Conta criada com sucesso! Faça login para entrar.");
+            alert("Conta criada com sucesso! Use o formulário de cima para entrar.");
             document.getElementById('register-form').reset();
         } else {
             const err = await res.json();
             alert("Erro ao criar conta: " + (err.detail || "Dados inválidos"));
         }
     } catch (error) {
-        alert("Erro de conexão.");
+        alert("Erro de conexão com a API.");
     }
 }
 
@@ -104,7 +112,7 @@ function showApp() {
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app-screen').style.display = 'block';
     
-    // Carrega os dados
+    // Carrega os dados protegidos
     loadEmpregados();
     loadTarefas();
 }
@@ -114,13 +122,13 @@ function showApp() {
 async function fetchSecure(endpoint, options = {}) {
     if (!authToken) {
         logout();
-        return;
+        return null;
     }
 
     // Cria cabeçalhos se não existirem
     if (!options.headers) options.headers = {};
     
-    // Adiciona o Token JWT
+    // Adiciona o Token JWT no cabeçalho Authorization
     options.headers['Authorization'] = `Bearer ${authToken}`;
 
     try {
@@ -144,7 +152,7 @@ async function fetchSecure(endpoint, options = {}) {
 // =======================================================
 
 async function loadEmpregados() {
-    // Usa fetchSecure em vez de fetch normal
+    // Usa fetchSecure para enviar o token
     const response = await fetchSecure('/empregados/');
     if (!response || !response.ok) return;
 
@@ -157,7 +165,7 @@ async function loadEmpregados() {
     if (select) select.innerHTML = '<option value="">-- Selecione um Responsável --</option>';
 
     empregados.forEach(emp => {
-        // Tabela
+        // Preenche a Tabela
         if (tbody) {
             const row = tbody.insertRow();
             row.innerHTML = `
@@ -167,11 +175,11 @@ async function loadEmpregados() {
                 <td><button onclick="deleteEmpregado(${emp.id})" style="background-color: #f44336; padding: 5px 10px; border:none; color:white; border-radius:4px; cursor:pointer;">Excluir</button></td>
             `;
         }
-        // Dropdown
+        // Preenche o Dropdown de tarefas
         if (select) {
             const opt = document.createElement('option');
             opt.value = emp.id;
-            opt.textContent = emp.nome;
+            opt.textContent = `${emp.nome} (${emp.cargo})`;
             select.appendChild(opt);
         }
     });
@@ -180,7 +188,7 @@ async function loadEmpregados() {
 async function handleCreateEmpregado(e) {
     e.preventDefault();
     
-    // Agora precisamos enviar a senha também ao criar um empregado novo no painel
+    // Pega os dados do formulário interno (dashboard)
     const data = {
         nome: document.getElementById('nome').value,
         cargo: document.getElementById('cargo').value,
@@ -188,7 +196,7 @@ async function handleCreateEmpregado(e) {
         senha: document.getElementById('senha').value // Novo campo de senha
     };
 
-    // Usa a rota de registro
+    // Usa a rota de registro (reaproveitada para criar usuários logado)
     const res = await fetchSecure('/empregados/registrar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -198,7 +206,7 @@ async function handleCreateEmpregado(e) {
     if (res && res.ok) {
         alert("Empregado cadastrado com sucesso!");
         document.getElementById('empregado-form').reset();
-        loadEmpregados();
+        loadEmpregados(); // Atualiza a lista
     } else {
         alert("Erro ao cadastrar. Verifique se o e-mail já existe.");
     }
@@ -207,14 +215,11 @@ async function handleCreateEmpregado(e) {
 async function deleteEmpregado(id) {
     if(!confirm("Tem certeza que deseja excluir?")) return;
     
-    // A rota DELETE precisa existir no backend. 
-    // Se não tiver implementado DELETE no backend seguro, isso dará erro 405 ou 404.
-    // Assumindo que você manteve a rota de delete no main.py:
-    const res = await fetchSecure(`/empregados/${id}`, { method: 'DELETE' }); // Note a crase `
+    const res = await fetchSecure(`/empregados/${id}`, { method: 'DELETE' });
     
     if (res && res.ok) {
         loadEmpregados();
-        loadTarefas();
+        loadTarefas(); // Atualiza tarefas para refletir a exclusão
     } else {
         alert("Erro ao excluir. Talvez você não tenha permissão de Admin.");
     }
@@ -282,7 +287,7 @@ async function handleCreateTarefa(e) {
 
 async function deleteTarefa(id) {
     if(!confirm("Excluir tarefa?")) return;
-    const res = await fetchSecure(`/tarefas/${id}`, { method: 'DELETE' }); // Note a crase `
+    const res = await fetchSecure(`/tarefas/${id}`, { method: 'DELETE' });
     
     if (res && res.ok) {
         loadTarefas();
@@ -313,14 +318,14 @@ function setupTabs() {
 
 const alertContainer = document.createElement('div');
 alertContainer.id = 'task-alerts';
-// Insere alertas apenas na tela do sistema
-document.addEventListener('DOMContentLoaded', () => {
+
+function setupAlertSystem() {
     const appScreen = document.getElementById('app-screen');
     const header = appScreen ? appScreen.querySelector('header') : null;
     if (header) {
         header.parentNode.insertBefore(alertContainer, header.nextSibling);
     }
-});
+}
 
 function checkUrgentTasks(tarefas) {
     const pending = tarefas.filter(t => !t.concluida);
