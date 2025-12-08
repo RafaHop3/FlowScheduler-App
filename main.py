@@ -11,6 +11,7 @@ import os
 
 # Importa database e models
 from database import get_db
+# Certifique-se de que models.py tem senha_hash e funcao
 from models import Base, Empregado, Tarefa
 
 # --- CONFIGURAÇÃO DE SEGURANÇA ---
@@ -111,7 +112,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
 
 @app.get("/", tags=["Root"])
 def read_root():
-    # Mensagem atualizada para confirmar que o código novo subiu
+    # Esta mensagem confirma que o código novo subiu!
     return {"message": "Flow Scheduler API Segura está online!"}
 
 # --- ROTAS PÚBLICAS (Login e Registro) ---
