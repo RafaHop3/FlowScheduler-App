@@ -4,37 +4,88 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Flow Scheduler Web</title>
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <header>
-        <h1>Flow Scheduler: Gerenciamento de Empregados (WEB)</h1>
+        <h1>Flow Scheduler: Sistema de Gestão Completo</h1>
     </header>
-    <main>
-        <div id="form-container">
-            <h2>Adicionar Novo Empregado (POST)</h2>
-            <form id="empregado-form">
-                <input type="text" id="nome" placeholder="Nome" required>
-                <input type="text" id="cargo" placeholder="Cargo" required>
-                <input type="email" id="email" placeholder="Email" required>
-                <button type="submit">Salvar Empregado</button>
-            </form>
-        </div>
+    
+    <main style="display: flex; flex-direction: column; gap: 40px; max-width: 1200px;">
+        
+        <section id="employee-section" style="border-bottom: 2px solid #ddd; padding-bottom: 20px;">
+            <h2 style="color: #3f51b5;">1. Gerenciar Empregados</h2>
+            <div style="display: flex; gap: 30px; flex-wrap: wrap;">
+                
+                <div style="flex: 1; min-width: 300px;">
+                    <h3>Novo Empregado</h3>
+                    <form id="empregado-form">
+                        <input type="text" id="nome" placeholder="Nome Completo" required>
+                        <input type="text" id="cargo" placeholder="Cargo (ex: DEV, Designer)" required>
+                        <input type="email" id="email" placeholder="Email" required>
+                        <button type="submit">Salvar Empregado</button>
+                    </form>
+                </div>
 
-        <div id="list-container">
-            <h2>Empregados Cadastrados (GET)</h2>
-            <table id="empregados-table">
-                <thead>
-                    <tr><th>ID</th><th>Nome</th><th>Cargo</th><th>Email</th></tr>
-                </thead>
-                <tbody>
-                    </tbody>
-            </table>
-            <button id="load-data">Carregar Lista</button>
-        </div>
+                <div style="flex: 1; min-width: 300px;">
+                    <h3>Lista de Colaboradores</h3>
+                    <table id="empregados-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Nome</th>
+                                <th>Cargo</th>
+                                <th>Ações</th> </tr>
+                        </thead>
+                        <tbody>
+                            </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <section id="task-section">
+            <h2 style="color: #ff9800;">2. Gerenciar Tarefas & Funções</h2>
+            <div style="display: flex; gap: 30px; flex-wrap: wrap;">
+                
+                <div style="flex: 1; min-width: 300px;">
+                    <h3>Nova Tarefa</h3>
+                    <form id="tarefa-form">
+                        <input type="text" id="titulo-tarefa" placeholder="Descrição da Tarefa" required>
+                        <input type="text" id="prazo-tarefa" placeholder="Prazo (ex: 2025-12-31)" required>
+                        
+                        <label for="empregado-select"><strong>Quem é o responsável?</strong></label>
+                        <select id="empregado-select" style="width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 4px;">
+                            <option value="">-- Selecione um Empregado --</option>
+                            </select>
+
+                        <button type="submit" style="background-color: #ff9800;">Criar Tarefa</button>
+                    </form>
+                </div>
+
+                <div style="flex: 1; min-width: 300px;">
+                    <h3>Quadro de Tarefas</h3>
+                    <table id="tarefas-table">
+                        <thead>
+                            <tr>
+                                <th>Tarefa</th>
+                                <th>Prazo</th>
+                                <th>Responsável (ID)</th>
+                                <th>Status</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
     </main>
+    
     <footer>
-        <p>Conectado à Flow Scheduler API (FastAPI).</p>
+        <p>Conectado à Flow Scheduler API (FastAPI) no Render.</p>
     </footer>
 
     <script src="script.js"></script>
