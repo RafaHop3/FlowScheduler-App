@@ -23,8 +23,7 @@ class EmpregadoSchema(BaseModel):
     email: str
     
     class Config:
-        from_attributes = True # ✅ CORREÇÃO: Pydantic V2 usa from_attributes
-        # orm_mode = True # <-- Remova esta linha se estiver usando Pydantic V2
+        from_attributes = True # ✅ Pydantic V2 usa from_attributes
 
 class TarefaSchema(BaseModel):
     id: int
@@ -35,12 +34,10 @@ class TarefaSchema(BaseModel):
     concluida: bool = False
     
     class Config:
-        from_attributes = True # ✅ CORREÇÃO: Pydantic V2 usa from_attributes
-        # orm_mode = True # <-- Remova esta linha se estiver usando Pydantic V2
+        from_attributes = True # ✅ Pydantic V2 usa from_attributes
 
 # -----------------------------------------------------------------
 # --- Schemas de Entrada (Input) e Atualização ---
-# (Manter como estava, pois não usam orm_mode)
 # -----------------------------------------------------------------
 
 class EmpregadoCreate(BaseModel):
@@ -74,15 +71,14 @@ class TarefaUpdate(BaseModel):
 
 app = FastAPI(title="Flow Scheduler API")
 
-# Defina a URL onde o frontend está sendo executado (pode ser o Render Static Site ou localhost)
-# Mantenha o localhost para testes locais.
+# ✅ LISTA DE ORIGENS PERMITIDAS (CORS)
+# Adicionei aqui o seu site e a sua API atualizada.
 origins = [
     "http://localhost:8000",
     "http://127.0.0.1:8000",
-    "http://127.0.0.1:5500", # Exemplo comum de Live Server
-    "https://flowscheduler-app.onrender.com", # Necessário para o Render Docs/Health Checks
-    # ADICIONE AQUI A URL DO SEU FRONTEND HOSPEDADO (SE APLICÁVEL)
-    # Exemplo: "https://flow-scheduler-frontend-xxxx.onrender.com"
+    "http://127.0.0.1:5500", 
+    "https://flowscheduler-app-1.onrender.com", # Sua API Backend
+    "https://flow-scheduler-web.onrender.com",  # <--- SEU SITE FRONTEND (CRÍTICO PARA FUNCIONAR)
 ]
 
 app.add_middleware(
