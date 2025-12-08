@@ -329,7 +329,9 @@ class TarefasView(BaseView):
             self.tree.insert('', tk.END, values=('Nenhuma tarefa cadastrada.', '', '', '', ''), tags=('empty',))
         else:
             for t in tarefas:
-                empregado_nome = t.empregado_nome if t.empregado_nome else "Não Atribuído"
+                # Nota: A TarefasView depende que a função listar_tarefas() no database.py retorne 'empregado_nome'.
+                # Assumindo que database.py foi corrigido para buscar o nome do empregado (como no listar_proximas_tarefas).
+                empregado_nome = getattr(t, 'empregado_nome', 'Não Atribuído') if t.empregado_id else "Não Atribuído"
                 status = "✅ SIM" if t.concluida else "❌ NÃO"
                 
                 self.tree.insert('', tk.END, 
@@ -369,6 +371,7 @@ class TarefasView(BaseView):
         empregado_combo.set("Não Atribuído")
 
         concluida_var = tk.BooleanVar(janela_form)
+        
         if tarefa_item:
             tarefa_id = tarefa_item[0]
             tarefa_completa = buscar_tarefa_por_id(tarefa_id) 
@@ -408,7 +411,8 @@ class TarefasView(BaseView):
             else:
                 messagebox.showwarning("Atenção", "Preencha Título e Prazo.", parent=janela_form)
 
-            ttk.Button(janela_form, text="Salvar Tarefa", command=submit, bootstyle="success").grid(row=5, column=0, columnspan=2, pady=15)
+        # CORREÇÃO CRÍTICA: O botão agora está na indentação correta
+        ttk.Button(janela_form, text="Salvar Tarefa", command=submit, bootstyle="success").grid(row=5, column=0, columnspan=2, pady=15)
 
     def abrir_formulario_edicao(self):
         selecao = self.tree.selection()
@@ -439,7 +443,7 @@ class TarefasView(BaseView):
             else:
                 messagebox.showwarning("Atenção", "Preencha Título e Prazo.", parent=janela_form)
 
-            ttk.Button(janela_form, text="Salvar Alterações", command=submit_edicao, bootstyle="warning").grid(row=5, column=0, columnspan=2, pady=15)
+        ttk.Button(janela_form, text="Salvar Alterações", command=submit_edicao, bootstyle="warning").grid(row=5, column=0, columnspan=2, pady=15)
 
     def deletar_tarefa(self):
         selecao = self.tree.selection()

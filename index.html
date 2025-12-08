@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flow Scheduler Web</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header>
+        <h1>Flow Scheduler: Gerenciamento de Empregados (WEB)</h1>
+    </header>
+    <main>
+        <div id="form-container">
+            <h2>Adicionar Novo Empregado (POST)</h2>
+            <form id="empregado-form">
+                <input type="text" id="nome" placeholder="Nome" required>
+                <input type="text" id="cargo" placeholder="Cargo" required>
+                <input type="email" id="email" placeholder="Email" required>
+                <button type="submit">Salvar Empregado</button>
+            </form>
+        </div>
+
+        <div id="list-container">
+            <h2>Empregados Cadastrados (GET)</h2>
+            <table id="empregados-table">
+                <thead>
+                    <tr><th>ID</th><th>Nome</th><th>Cargo</th><th>Email</th></tr>
+                </thead>
+                <tbody>
+                    </tbody>
+            </table>
+            <button id="load-data">Carregar Lista</button>
+        </div>
+    </main>
+    <footer>
+        <p>Conectado à Flow Scheduler API (FastAPI).</p>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>

@@ -1,6 +1,7 @@
 # main.py
 
 from fastapi import FastAPI, Depends, HTTPException
+from fastapi.middleware.cors import CORSMiddleware # IMPORTANTE: Adicionado
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import List, Optional
@@ -9,7 +10,8 @@ from typing import List, Optional
 from database import (
     get_db, 
     get_empregados, get_empregado_by_id, create_empregado, update_empregado, delete_empregado,
-    get_tarefas, get_tarefa_by_id, create_tarefa, update_tarefa, delete_tarefa
+    get_tarefas, get_tarefa_by_id, create_tarefa, update_tarefa, delete_tarefa,
+    get_tarefas_by_empregado_id # NOVO: Função para listar tarefas por empregado
 )
 
 # -----------------------------------------------------------------
@@ -54,13 +56,11 @@ class TarefaBase(BaseModel):
 
 # --- Schemas de Atualização (Para PUT/PATCH) ---
 class EmpregadoUpdate(BaseModel):
-    # Todos os campos são opcionais
     nome: Optional[str] = None
     cargo: Optional[str] = None
     email: Optional[str] = None
 
 class TarefaUpdate(BaseModel):
-    # Todos os campos são opcionais
     titulo: Optional[str] = None
     descricao: Optional[str] = None
     prazo: Optional[str] = None
@@ -69,10 +69,27 @@ class TarefaUpdate(BaseModel):
 
 
 # -----------------------------------------------------------------
-# --- Configuração do FastAPI ---
+# --- Configuração do FastAPI (CORS Adicionado AQUI) ---
 # -----------------------------------------------------------------
 
 app = FastAPI(title="Flow Scheduler API")
+
+# --- Configuração do CORS para permitir requisições (CRÍTICO) ---
+origins = [
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+    "*", # Permite que o arquivo local 'file:///...' funcione (durante o teste)
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"], # Permite POST, GET, PUT, DELETE
+    allow_headers=["*"],
+)
+# -----------------------------------------------------------------
+
 
 @app.get("/", tags=["Root"])
 def read_root():
@@ -121,6 +138,22 @@ def listar_tarefas_api(db: Session = Depends(get_db)):
     """[GET] Lista todas as tarefas."""
     return get_tarefas(db)
 
+# --- NOVO ENDPOINT DE FILTRO POR EMPREGADO ---
+
+@app.get("/tarefas/empregado/{empregado_id}", response_model=List[TarefaSchema], tags=["Tarefas"])
+def listar_tarefas_por_empregado_api(empregado_id: int, db: Session = Depends(get_db)):
+    """[GET] Lista todas as tarefas atribuídas a um empregado específico."""
+    
+    # 1. Checa se o empregado existe
+    if not get_empregado_by_id(db, empregado_id):
+        raise HTTPException(status_code=404, detail="Empregado não encontrado.")
+    
+    # 2. Busca as tarefas usando a nova função no database.py
+    tarefas = get_tarefas_by_empregado_id(db, empregado_id)
+    return tarefas
+
+# ---------------------------------------------
+
 @app.post("/tarefas/", response_model=TarefaSchema, tags=["Tarefas"], status_code=201)
 def criar_tarefa_api(tarefa: TarefaBase, db: Session = Depends(get_db)):
     """[POST] Cria uma nova tarefa."""
@@ -154,3 +187,6 @@ def deletar_tarefa_api(tarefa_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Tarefa não encontrada.")
         
     return delete_tarefa(db, db_tarefa)
+
+# --- Execução Local (Opcional, mas útil para referência) ---
+# Para rodar localmente, execute: uvicorn main:app --reload

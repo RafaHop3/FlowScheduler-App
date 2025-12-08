@@ -17,8 +17,9 @@ engine = create_engine(
     connect_args={"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {} 
 )
 
-# Cria as tabelas (se não existirem)
-Base.metadata.create_all(engine) 
+# REMOVIDO: Base.metadata.create_all(engine)
+# Esta linha foi removida para evitar o crash de conexão durante o deploy.
+# A criação das tabelas será feita via script de inicialização no Procfile.
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -51,6 +52,39 @@ def get_tarefa_by_id(db_session: Session, tarefa_id: int):
 def get_tarefas(db_session: Session, skip: int = 0, limit: int = 100):
     """Lista todas as tarefas com paginação (útil para APIs)."""
     return db_session.query(Tarefa).offset(skip).limit(limit).all()
+
+# --- NOVAS FUNÇÕES DE LEITURA E RELATÓRIO ---
+
+def get_tarefas_by_empregado_id(db_session: Session, empregado_id: int):
+    """Lista todas as tarefas atribuídas a um empregado específico."""
+    return db_session.query(Tarefa).filter(Tarefa.empregado_id == empregado_id).all()
+
+def listar_proximas_tarefas(db_session: Session = SessionLocal()):
+    """
+    Lista tarefas pendentes (limitado a 5), ordenadas por prazo. 
+    Inclui o nome do empregado responsável para exibição no Dashboard.
+    """
+    
+    # Faz um LEFT OUTER JOIN para incluir o nome do empregado (mesmo que seja NULO)
+    tarefas_com_empregado = db_session.query(
+        Tarefa, 
+        Empregado.nome.label('empregado_nome') # Renomeia o campo nome do empregado
+    ).outerjoin(
+        Empregado, Tarefa.empregado_id == Empregado.id
+    ).filter(
+        Tarefa.concluida == False
+    ).order_by(
+        Tarefa.prazo.asc()
+    ).limit(5).all() # Limita a 5 para o preview
+
+    # Mapeia o resultado do JOIN para um objeto Tarefa com o atributo 'empregado_nome'
+    resultado = []
+    for tarefa, empregado_nome in tarefas_com_empregado:
+        # Adiciona o nome do empregado dinamicamente ao objeto Tarefa para a visualização no Tkinter
+        setattr(tarefa, 'empregado_nome', empregado_nome)
+        resultado.append(tarefa)
+        
+    return resultado
 
 # -----------------------------------------------------------------
 # --- Funções CRUD (Criação) ---
